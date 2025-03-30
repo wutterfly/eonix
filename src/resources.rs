@@ -10,9 +10,11 @@ pub trait Resource: Any + Send + Sync {}
 
 pub trait NoSend: Any {}
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Resources<T: ?Sized + Any> {
     resources: HashMap<TypeId, AtomicRefCell<Box<dyn Any>>>,
+
+    /// Marks if these resources can be send
     _p: PhantomData<T>,
 }
 
@@ -28,7 +30,7 @@ impl<T: ?Sized + Any> Resources<T> {
     }
 
     pub fn add_resource<R: Any>(&mut self, res: R) {
-        let type_id = TypeId::of::<T>();
+        let type_id = TypeId::of::<R>();
         let boxed: Box<dyn Any> = Box::new(res);
         let cell = AtomicRefCell::new(boxed);
 

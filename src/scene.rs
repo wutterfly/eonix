@@ -11,12 +11,6 @@ pub struct Scene {
     pub(crate) entities: EntityComponents,
 }
 
-impl std::fmt::Debug for Scene {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
 impl Scene {
     #[inline]
     pub fn new() -> Self {
@@ -45,7 +39,7 @@ impl Scene {
 
     #[inline]
     pub fn add_resource<R: Resource>(&mut self, res: R) {
-        self.resources.add_resource(Box::new(res));
+        self.resources.add_resource(res);
     }
 
     #[inline]
@@ -62,7 +56,7 @@ impl Scene {
 
     #[inline]
     pub fn add_nosend_resource<R: NoSend>(&mut self, res: R) {
-        self.nosend.add_resource(Box::new(res));
+        self.nosend.add_resource(res);
     }
 
     #[inline]
@@ -75,5 +69,12 @@ impl Scene {
     pub fn get_nosend_resource_mut<R: NoSend>(&mut self) -> Option<UnsendMut<R>> {
         let handle = self.nosend.get_resource_mut::<R>()?;
         Some(UnsendMut { handle })
+    }
+}
+
+impl Default for Scene {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }

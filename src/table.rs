@@ -1,9 +1,12 @@
 use std::{
     any::{Any, TypeId, type_name},
     collections::HashSet,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{Hash, Hasher},
     marker::PhantomData,
 };
+
+//use std::hash::DefaultHasher;
+use rustc_hash::FxHasher as DefaultHasher;
 
 use crate::{
     Component,
@@ -31,7 +34,7 @@ impl TableId {
 
     #[inline]
     pub const fn is_invalid(&self) -> bool {
-        self.1 == 0
+        self.0 == 0 && self.1 == 0
     }
 
     #[allow(clippy::debug_assert_with_mut_call)]
@@ -42,6 +45,7 @@ impl TableId {
         let mut builder = TableIdBuilder::new();
 
         for id in set {
+            #[cfg(debug_assertions)]
             debug_assert!(check.insert(*id));
             builder.add_unqiue(*id);
         }
@@ -68,7 +72,7 @@ impl TableIdBuilder {
     }
 
     pub fn add_unqiue(&mut self, id: TypeId) {
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = DefaultHasher::default();
         id.hash(&mut hasher);
         let hash = hasher.finish();
 
@@ -275,13 +279,13 @@ impl std::fmt::Debug for Table {
 
         use std::fmt::Write;
         _ = writeln!(&mut out, "Table");
-        _ = writeln!(&mut out, "ID: {:?}", self.id);
+        _ = writeln!(&mut out, "    ID: {:?}", self.id);
 
         for row in &self.rows {
-            _ = writeln!(&mut out, "{} - {:?}: [..]", row.type_name, row.tid());
+            _ = writeln!(&mut out, "    {} - {:?}: [..]", row.type_name, row.tid());
         }
 
-        _ = writeln!(&mut out, "ents:    {:?}", self.entities);
+        _ = writeln!(&mut out, "    ents:    {:?}", self.entities);
 
         f.write_str(&out)
     }

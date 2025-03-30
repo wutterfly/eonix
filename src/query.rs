@@ -35,7 +35,7 @@ impl<'a, E: Extract> Query<'a, E> {
         self.tables.len()
     }
 
-    pub fn get(
+    pub fn get_entity_components(
         &mut self,
         entity: &Entity,
     ) -> Option<<E::Extracted<'a> as GetComponentAccess>::Item<'_>> {
@@ -57,71 +57,63 @@ impl<'a, E: Extract> Query<'a, E> {
         table.get_entity(entity)
     }
 
-    pub fn iter(
-        &mut self,
-    ) -> impl Iterator<Item = <<E as Extract>::Extracted<'a> as GetComponentAccess>::Item<'_>> {
+    pub fn iter(&mut self) -> QueryIter<'a, '_, E> {
         let mut iter = self.tables.iter_mut();
         let current = iter.next().unwrap().iter();
 
-        QueryIter::<'_, '_, E, _> {
-            table: 0,
-            ent: 0,
+        QueryIter::<'_, '_, E> {
             tables: iter,
-            current,
+            current_table: current,
         }
     }
 }
 
-pub struct QueryIter<'a, 'b, E: Extract, I>
-where
-    I: Iterator<Item = <<E as Extract>::Extracted<'a> as GetComponentAccess>::Item<'b>>,
-{
-    table: usize,
-    ent: usize,
-    tables: std::slice::IterMut<'b, <E as Extract>::Extracted<'a>>,
-    current: I,
-}
-
-impl<'a, 'b, E: Extract, I> Iterator for QueryIter<'a, 'b, E, I>
-where
-    I: Iterator<Item = <<E as Extract>::Extracted<'a> as GetComponentAccess>::Item<'b>>,
-{
-    type Item = <<E as Extract>::Extracted<'a> as GetComponentAccess>::Item<'b>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let x = self.current.next();
-        x
-    }
-}
-
-pub struct TableAccess<'a, A> {
+pub struct TableAccess<'a, Rows: RowAccess> {
     pub(crate) table_id: TableId,
     pub(crate) entities: &'a [Entity],
-    pub(crate) extracted: A,
+    pub(crate) table_rows: Rows,
 }
 
-impl<A: RowAccess> TableAccess<'_, A> {
-    pub fn get_iter(&mut self) -> impl Iterator<Item = A::Item<'_>> {
-        TableAccessIter {
-            extracted: &mut self.extracted,
-        }
-    }
+pub struct QueryIter<'a, 'b, E: Extract> {
+    tables: std::slice::IterMut<'b, <E as Extract>::Extracted<'a>>,
+    current_table: <E::Extracted<'a> as GetComponentAccess>::Iter<'b>,
 }
 
-struct TableAccessIter<'a, A> {
-    extracted: &'a mut A,
-}
-
-impl<'a, A: RowAccess + 'a> Iterator for TableAccessIter<'a, A> {
-    type Item = A::Item<'a>;
+impl<'a, 'b, E: Extract> Iterator for QueryIter<'a, 'b, E> {
+    type Item = <<E::Extracted<'a> as GetComponentAccess>::Iter<'b> as Iterator>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        loop {
+            // try get next item from current iterator
+            let next_item = self.current_table.next();
+
+            match next_item {
+                // return item
+                Some(item) => return Some(item),
+
+                // table is finished
+                None => {
+                    // get next table
+                    let next_table = self.tables.next();
+
+                    match next_table {
+                        // found next table, loop
+                        Some(table) => {
+                            self.current_table = table.iter();
+                            continue;
+                        }
+                        // no more tables, all finished
+                        None => return None,
+                    }
+                }
+            }
+        }
     }
 }
 
 pub trait Extract {
     type Extracted<'new>: GetComponentAccess;
+
     type RowOnly<'new>: RowAccess;
 
     fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()>;
@@ -137,17 +129,27 @@ pub trait GetComponentAccess {
     where
         Self: 'a;
 
+    type Iter<'a>: Iterator<Item = Self::Item<'a>>
+    where
+        Self: 'a;
+
     fn table_id(&self) -> TableId;
 
     fn get_entity(&mut self, entity: &Entity) -> Option<Self::Item<'_>>;
 
-    fn iter(&mut self) -> impl Iterator<Item = Self::Item<'_>>;
+    fn iter(&mut self) -> Self::Iter<'_>;
 }
 
 pub trait RowAccess {
-    type Item<'new>
+    type Item<'a>
     where
-        Self: 'new;
+        Self: 'a;
 
-    fn get(&mut self, position: usize) -> Option<Self::Item<'_>>;
+    fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>>;
+
+    type Iter<'a>: Iterator<Item = Self::Item<'a>>
+    where
+        Self: 'a;
+
+    fn get_iter(&mut self) -> Self::Iter<'_>;
 }

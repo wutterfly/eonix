@@ -24,16 +24,11 @@ pub trait ComponentSet: TableIdent {
     fn push_or_update(self, table: &mut Table, position: usize);
 }
 
+#[derive(Default)]
 pub struct EntityComponents {
     pub(crate) tables: Vec<Table>,
     pub(crate) entities: Vec<(Generation, TableId)>,
     spawner: EntitySpawner,
-}
-
-impl std::fmt::Debug for EntityComponents {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
 }
 
 impl EntityComponents {

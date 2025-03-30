@@ -1,5 +1,6 @@
 use std::{
     any::TypeId,
+    iter::Zip,
     ops::{Deref, DerefMut},
 };
 
@@ -188,7 +189,7 @@ const _: () = {
             let access = TableAccess {
                 table_id: table.id(),
                 entities,
-                extracted: table.try_get_row_ref::<C>()?,
+                table_rows: table.try_get_row_ref::<C>()?,
             };
 
             Ok(access)
@@ -211,7 +212,7 @@ const _: () = {
             let access = TableAccess {
                 table_id: table.id(),
                 entities,
-                extracted: table.try_get_row_mut::<C>()?,
+                table_rows: table.try_get_row_mut::<C>()?,
             };
 
             Ok(access)
@@ -234,7 +235,7 @@ const _: () = {
             let access = TableAccess {
                 table_id: table.id(),
                 entities,
-                extracted: (A::get_row_only(table)?, B::get_row_only(table)?),
+                table_rows: (A::get_row_only(table)?, B::get_row_only(table)?),
             };
 
             Ok(access)
@@ -250,6 +251,11 @@ const _: () = {
         where
             Self: 'a;
 
+        type Iter<'a>
+            = A::Iter<'a>
+        where
+            Self: 'a;
+
         #[inline]
         fn table_id(&self) -> TableId {
             self.table_id
@@ -259,11 +265,11 @@ const _: () = {
         fn get_entity(&mut self, entity: &Entity) -> Option<Self::Item<'_>> {
             let position = self.entities.iter().position(|ent| ent == entity).unwrap();
 
-            self.extracted.get(position)
+            self.table_rows.get_entity_components(position)
         }
 
-        fn iter(&mut self) -> impl Iterator<Item = Self::Item<'_>> {
-            self.get_iter()
+        fn iter(&mut self) -> Self::Iter<'_> {
+            self.table_rows.get_iter()
         }
     }
 };
@@ -271,14 +277,24 @@ const _: () = {
 // RowAccess
 const _: () = {
     impl<C: Component> RowAccess for RowAccessRef<'_, C> {
-        type Item<'new>
-            = &'new C
+        type Item<'a>
+            = &'a C
         where
-            Self: 'new;
+            Self: 'a;
 
         #[inline]
-        fn get(&mut self, position: usize) -> Option<Self::Item<'_>> {
+        fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>> {
             RowAccessRef::deref(self).get(position)
+        }
+
+        type Iter<'a>
+            = std::slice::Iter<'a, C>
+        where
+            Self: 'a;
+
+        #[inline]
+        fn get_iter(&mut self) -> Self::Iter<'_> {
+            RowAccessRef::deref(self).iter()
         }
     }
 
@@ -289,22 +305,48 @@ const _: () = {
             Self: 'new;
 
         #[inline]
-        fn get(&mut self, position: usize) -> Option<Self::Item<'_>> {
+        fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>> {
             RowAccessMut::deref_mut(self).get_mut(position)
+        }
+
+        type Iter<'a>
+            = std::slice::IterMut<'a, C>
+        where
+            Self: 'a;
+
+        #[inline]
+        fn get_iter(&mut self) -> Self::Iter<'_> {
+            RowAccessMut::deref_mut(self).iter_mut()
         }
     }
 
     impl<A: RowAccess, B: RowAccess> RowAccess for (A, B) {
-        type Item<'new>
-            = (A::Item<'new>, B::Item<'new>)
+        type Item<'a>
+            = (A::Item<'a>, B::Item<'a>)
         where
-            Self: 'new;
+            Self: 'a;
 
         #[inline]
-        fn get(&mut self, position: usize) -> Option<Self::Item<'_>> {
+        fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>> {
             let (a, b) = self;
 
-            Some((a.get(position)?, b.get(position)?))
+            Some((
+                a.get_entity_components(position)?,
+                b.get_entity_components(position)?,
+            ))
+        }
+
+        type Iter<'a>
+            = Zip<A::Iter<'a>, B::Iter<'a>>
+        where
+            A: 'a,
+            B: 'a;
+
+        #[inline]
+        fn get_iter(&mut self) -> Self::Iter<'_> {
+            let (a, b) = self;
+
+            a.get_iter().zip(b.get_iter())
         }
     }
 };

@@ -1,16 +1,8 @@
-use eonix::{Component, Query, World};
+mod common;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct C1(u32);
-impl Component for C1 {}
+use eonix::{Query, World};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct C2(u32);
-impl Component for C2 {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct C3(u32);
-impl Component for C3 {}
+use common::*;
 
 #[test]
 fn test_query_get() {
@@ -29,7 +21,7 @@ fn test_query_get() {
     assert_eq!(query.table_count(), 1);
 
     for (i, ent) in ents.iter().enumerate() {
-        let (c1, c2) = query.get(ent).unwrap();
+        let (c1, c2) = query.get_entity_components(ent).unwrap();
         assert_eq!(c1.0, i as u32);
         assert_eq!(c2.0, i as u32 + 100);
     }
@@ -48,11 +40,11 @@ fn test_add_components() {
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C1(42));
 
         let mut query = Query::<&mut C2>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C2(123));
     }
 
@@ -62,11 +54,11 @@ fn test_add_components() {
 
     {
         let mut query = Query::<&mut C1>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C1(1002));
 
         let mut query = Query::<&C2>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C2(123));
     }
 
@@ -76,15 +68,15 @@ fn test_add_components() {
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C1(1002));
 
         let mut query = Query::<&C2>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C2(123));
 
         let mut query = Query::<&mut C3>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C3(090));
     }
 }
@@ -101,15 +93,15 @@ fn test_remove_components() {
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C1(001));
 
         let mut query = Query::<&C2>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C2(002));
 
         let mut query = Query::<&C3>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C3(003));
     }
 
@@ -117,15 +109,15 @@ fn test_remove_components() {
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
-        let res = query.get(&entity);
+        let res = query.get_entity_components(&entity);
         assert!(res.is_none());
 
         let mut query = Query::<&C2>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C2(002));
 
         let mut query = Query::<&C3>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C3(003));
     }
 
@@ -133,15 +125,15 @@ fn test_remove_components() {
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
-        let res = query.get(&entity);
+        let res = query.get_entity_components(&entity);
         assert!(res.is_none());
 
         let mut query = Query::<&C2>::new(&scene).unwrap();
-        let res = query.get(&entity);
+        let res = query.get_entity_components(&entity);
         assert!(res.is_none());
 
         let mut query = Query::<&C3>::new(&scene).unwrap();
-        let res = query.get(&entity).unwrap();
+        let res = query.get_entity_components(&entity).unwrap();
         assert_eq!(*res, C3(003));
     }
 
@@ -149,15 +141,15 @@ fn test_remove_components() {
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
-        let res = query.get(&entity);
+        let res = query.get_entity_components(&entity);
         assert!(res.is_none());
 
         let mut query = Query::<&C2>::new(&scene).unwrap();
-        let res = query.get(&entity);
+        let res = query.get_entity_components(&entity);
         assert!(res.is_none());
 
         let mut query = Query::<&C3>::new(&scene).unwrap();
-        let res = query.get(&entity);
+        let res = query.get_entity_components(&entity);
         assert!(res.is_none());
     }
 }
@@ -180,5 +172,8 @@ fn test_query_iter() {
 
     let iter = query.iter();
 
-    for x in iter {}
+    for (i, (c1, c2)) in iter.enumerate() {
+        assert_eq!(c1.0, i as u32);
+        assert_eq!(c2.0, i as u32 + 100);
+    }
 }

@@ -12,12 +12,6 @@ pub struct World {
     current_scene: Scene,
 }
 
-impl std::fmt::Debug for World {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
 impl World {
     pub fn new() -> Self {
         Self {
@@ -62,5 +56,12 @@ impl World {
     pub fn get_nosend_resource_mut<R: NoSend>(&mut self) -> Option<GlobalUnsendMut<R>> {
         let handle = self.global_nosend.get_resource_mut::<R>()?;
         Some(GlobalUnsendMut { handle })
+    }
+}
+
+impl Default for World {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }
