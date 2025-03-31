@@ -16,3 +16,6 @@ pub use components::Component;
 pub use query::Query;
 pub use scene::Scene;
 pub use world::World;
+
+impl Component for u32 {}
+impl Component for i32 {}

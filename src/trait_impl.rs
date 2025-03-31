@@ -157,7 +157,17 @@ const _: () = {
     }
 
     impl<A: Component, B: Component> TableIdent for (A, B) {
+        #[inline]
+        fn validate() {
+            unique_tuple(&[TypeId::of::<A>(), TypeId::of::<B>()]);
+        }
+
         fn table_id() -> TableId {
+            debug_assert!({
+                let slice = [TypeId::of::<A>(), TypeId::of::<B>()];
+                !(1..slice.len()).any(|i| slice[i..].contains(&slice[i - 1]))
+            });
+
             let mut builder = TableIdBuilder::new();
 
             builder.add_unqiue(TypeId::of::<A>());
@@ -167,11 +177,36 @@ const _: () = {
         }
 
         fn row_count() -> usize {
-            2
+            0 + 1 + 1
         }
 
         fn rows() -> Box<[Row]> {
             Box::new([Row::new::<A>(), Row::new::<B>()])
+        }
+    }
+
+    impl<A: Component, B: Component, C: Component> TableIdent for (A, B, C) {
+        #[inline]
+        fn validate() {
+            unique_tuple(&[TypeId::of::<A>(), TypeId::of::<B>(), TypeId::of::<C>()]);
+        }
+
+        fn table_id() -> TableId {
+            let mut builder = TableIdBuilder::new();
+
+            builder.add_unqiue(TypeId::of::<A>());
+            builder.add_unqiue(TypeId::of::<B>());
+            builder.add_unqiue(TypeId::of::<C>());
+
+            builder.finish()
+        }
+
+        fn row_count() -> usize {
+            0 + 1 + 1 + 1
+        }
+
+        fn rows() -> Box<[Row]> {
+            Box::new([Row::new::<A>(), Row::new::<B>(), Row::new::<C>()])
         }
     }
 };
@@ -181,6 +216,14 @@ const _: () = {
     impl<C: Component> Extract for &C {
         type Extracted<'new> = TableAccess<'new, Self::RowOnly<'new>>;
         type RowOnly<'new> = RowAccessRef<'new, C>;
+
+        #[inline]
+        fn raw_type() -> TypeId {
+            TypeId::of::<C>()
+        }
+
+        #[inline]
+        fn validate() {}
 
         #[inline]
         fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()> {
@@ -206,6 +249,14 @@ const _: () = {
         type RowOnly<'new> = RowAccessMut<'new, C>;
 
         #[inline]
+        fn raw_type() -> TypeId {
+            TypeId::of::<C>()
+        }
+
+        #[inline]
+        fn validate() {}
+
+        #[inline]
         fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()> {
             let entities = &table.entities;
 
@@ -227,6 +278,11 @@ const _: () = {
     impl<A: Extract, B: Extract> Extract for (A, B) {
         type Extracted<'new> = TableAccess<'new, Self::RowOnly<'new>>;
         type RowOnly<'new> = (A::RowOnly<'new>, B::RowOnly<'new>);
+
+        #[inline]
+        fn validate() {
+            unique_tuple(&[A::raw_type(), B::raw_type()]);
+        }
 
         #[inline]
         fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()> {
@@ -350,3 +406,17 @@ const _: () = {
         }
     }
 };
+
+#[inline]
+fn unique_tuple<const N: usize>(_types: &[TypeId; N]) {
+    #[cfg(debug_assertions)]
+    {
+        for (i, t1) in _types.iter().enumerate() {
+            for (j, t2) in _types.iter().enumerate() {
+                if i != j {
+                    debug_assert_ne!(t1, t2)
+                }
+            }
+        }
+    }
+}

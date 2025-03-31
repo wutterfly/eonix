@@ -1,3 +1,5 @@
+use std::any::TypeId;
+
 use crate::{
     Scene,
     entity::{Entity, Generation},
@@ -12,7 +14,22 @@ pub struct Query<'a, E: Extract> {
 impl<'a, E: Extract> Query<'a, E> {
     #[inline]
     pub fn new(scene: &'a Scene) -> Result<Self, ()> {
-        let tables = &scene.entities.tables;
+        E::validate();
+
+        let extracted_tables = Self::extract_tables(&scene.entities.tables)?;
+
+        Ok(Self {
+            tables: extracted_tables,
+            entities: &scene.entities.entities,
+        })
+    }
+
+    #[inline]
+    fn extract_tables(tables: &'a [Table]) -> Result<Vec<E::Extracted<'a>>, ()> {
+        if tables.is_empty() {
+            return Err(());
+        }
+
         let mut out = Vec::with_capacity(tables.len());
         for table in tables {
             if let Ok(access) = E::extract(table) {
@@ -24,10 +41,7 @@ impl<'a, E: Extract> Query<'a, E> {
             return Err(());
         }
 
-        Ok(Self {
-            tables: out,
-            entities: &scene.entities.entities,
-        })
+        Ok(out)
     }
 
     #[inline]
@@ -115,6 +129,13 @@ pub trait Extract {
     type Extracted<'new>: GetComponentAccess;
 
     type RowOnly<'new>: RowAccess;
+
+    #[inline]
+    fn raw_type() -> TypeId {
+        unimplemented!()
+    }
+
+    fn validate();
 
     fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()>;
 

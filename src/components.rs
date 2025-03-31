@@ -103,7 +103,7 @@ impl EntityComponents {
         }
     }
 
-    pub fn add_components<C: ComponentSet>(&mut self, entity: Entity, components: C) {
+    pub fn add_components<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
         // try to find entity
         let (generation, in_table) = match self.entities.get_mut(entity.id()) {
             Some((generation, in_table)) => (generation, in_table),
@@ -132,13 +132,13 @@ impl EntityComponents {
                 Some(table_i) => {
                     // insert directly in correct table
                     let target_table = self.tables.get_mut(table_i).unwrap();
-                    target_table.push(entity, components);
+                    target_table.push(*entity, components);
                     return;
                 }
                 None => {
                     // create new table, add to table
                     let mut new_table = Table::new::<C>();
-                    new_table.push(entity, components);
+                    new_table.push(*entity, components);
 
                     // insert new table in table list
                     self.tables.push(new_table);
@@ -213,10 +213,10 @@ impl EntityComponents {
             .unwrap();
 
         // move entity and components from current table to target table
-        current_table.move_entity(target_table, &entity);
+        current_table.move_entity_up(target_table, &entity);
 
-        // push missing component and override already existing
-        target_table.push_or_update(&entity, components);
+        // push missing component and/or override already existing
+        target_table.push_missing_or_update(&entity, components);
 
         *in_table = target_table_id;
     }
@@ -289,7 +289,7 @@ impl EntityComponents {
             .get_disjoint_mut([current_table_i, target_table_i])
             .unwrap();
 
-        current_table.move_or_remove::<C>(target_table, entity);
+        current_table.move_entity_down(target_table, entity);
 
         *in_table = target_table_id;
     }

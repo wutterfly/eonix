@@ -13,7 +13,7 @@ fn test_query_get() {
 
     for i in 0..100 {
         let entity = scene.spawn_entity();
-        scene.add_component(entity, (C1(i), C2(i + 100)));
+        scene.add_component(&entity, (C1(i), C2(i + 100)));
         ents.push(entity);
     }
 
@@ -36,7 +36,7 @@ fn test_add_components() {
 
     //
 
-    scene.add_component(entity, (C1(42), C2(123)));
+    scene.add_component(&entity, (C1(42), C2(123)));
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
@@ -50,7 +50,7 @@ fn test_add_components() {
 
     //
 
-    scene.add_component(entity, C1(1002));
+    scene.add_component(&entity, C1(1002));
 
     {
         let mut query = Query::<&mut C1>::new(&scene).unwrap();
@@ -64,7 +64,7 @@ fn test_add_components() {
 
     //
 
-    scene.add_component(entity, C3(090));
+    scene.add_component(&entity, C3(090));
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
@@ -87,9 +87,9 @@ fn test_remove_components() {
 
     let scene = world.current_scene_mut();
     let entity = scene.spawn_entity();
-    scene.add_component(entity, C1(001));
-    scene.add_component(entity, C2(002));
-    scene.add_component(entity, C3(003));
+    scene.add_component(&entity, C1(001));
+    scene.add_component(&entity, C2(002));
+    scene.add_component(&entity, C3(003));
 
     {
         let mut query = Query::<&C1>::new(&scene).unwrap();
@@ -155,7 +155,7 @@ fn test_remove_components() {
 }
 
 #[test]
-fn test_query_iter() {
+fn test_query_iter_single_table() {
     let mut world = World::new();
 
     let scene = world.current_scene_mut();
@@ -163,7 +163,7 @@ fn test_query_iter() {
 
     for i in 0..100 {
         let entity = scene.spawn_entity();
-        scene.add_component(entity, (C1(i), C2(i + 100)));
+        scene.add_component(&entity, (C1(i), C2(i + 100)));
         ents.push(entity);
     }
 
@@ -176,4 +176,43 @@ fn test_query_iter() {
         assert_eq!(c1.0, i as u32);
         assert_eq!(c2.0, i as u32 + 100);
     }
+}
+
+#[test]
+fn test_query_iter_multiple_table() {
+    let mut world = World::new();
+
+    let scene = world.current_scene_mut();
+    let mut ents = Vec::with_capacity(100);
+
+    // spawn entities
+    for _ in 0..100 {
+        let entity = scene.spawn_entity();
+        ents.push(entity);
+    }
+
+    // add single component
+    for (i, entity) in ents[0..10].iter().enumerate() {
+        scene.add_component(entity, C1(i as u32));
+    }
+
+    // add double component
+    for (i, entity) in ents.iter().enumerate() {
+        scene.add_component(entity, C2(i as u32 + 100));
+    }
+
+    let mut query = Query::<&C1>::new(&scene).unwrap();
+    assert_eq!(query.table_count(), 2);
+
+    let mut iter = query.iter().enumerate();
+
+    for (i, c1) in (&mut iter).take(10) {
+        assert_eq!(c1.0, i as u32);
+    }
+
+    for (i, c1) in (&mut iter).take(90) {
+        assert_eq!(c1.0, i as u32 + 100);
+    }
+
+    assert_eq!(iter.next(), None);
 }

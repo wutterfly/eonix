@@ -29,11 +29,13 @@ impl Scene {
         self.entities.delete_entity(entity);
     }
 
-    pub fn add_component<C: ComponentSet>(&mut self, entity: Entity, components: C) {
+    pub fn add_component<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
+        C::validate();
         self.entities.add_components(entity, components);
     }
 
     pub fn remove_components<C: ComponentSet>(&mut self, entity: &Entity) {
+        C::validate();
         self.entities.remove_component::<C>(entity);
     }
 

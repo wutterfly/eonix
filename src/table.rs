@@ -1,6 +1,5 @@
 use std::{
     any::{Any, TypeId, type_name},
-    collections::HashSet,
     hash::{Hash, Hasher},
     marker::PhantomData,
 };
@@ -16,6 +15,9 @@ use crate::{
 };
 
 pub trait TableIdent {
+    #[inline]
+    fn validate() {}
+
     fn table_id() -> TableId;
 
     fn row_count() -> usize;
@@ -40,7 +42,7 @@ impl TableId {
     #[allow(clippy::debug_assert_with_mut_call)]
     pub fn from_uniques<'a>(set: impl Iterator<Item = &'a TypeId>) -> Self {
         #[cfg(debug_assertions)]
-        let mut check = HashSet::<TypeId>::new();
+        let mut check = std::collections::HashSet::<TypeId>::new();
 
         let mut builder = TableIdBuilder::new();
 
@@ -104,6 +106,8 @@ pub struct Table {
 
 impl Table {
     pub fn new<C: ComponentSet>() -> Self {
+        C::validate();
+
         Self {
             id: C::table_id(),
             rows: C::rows(),
@@ -175,8 +179,13 @@ impl Table {
         debug_assert_eq!(removed, ent);
     }
 
+    pub fn push_missing_or_update<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
+        let position = self.get_entity_position(entity).unwrap();
+        C::push_or_update(components, self, position);
+    }
+
     /// Moves an Entity from Self to dst, for every row that self has.
-    pub fn move_entity(&mut self, dst: &mut Self, entity: &Entity) {
+    pub fn move_entity_up(&mut self, dst: &mut Self, entity: &Entity) {
         let position = self.get_entity_position(entity).unwrap();
 
         'outer: for src_row in &mut self.rows {
@@ -190,17 +199,13 @@ impl Table {
             unreachable!("dst should have all rows that self has");
         }
 
-        self.entities.swap_remove(position);
+        let removed = self.entities.swap_remove(position);
+        debug_assert_eq!(removed, *entity);
         dst.entities.push(*entity);
     }
 
-    pub fn push_or_update<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
-        let position = self.get_entity_position(entity).unwrap();
-
-        C::push_or_update(components, self, position);
-    }
-
-    pub fn move_or_remove<C: ComponentSet>(&mut self, dst: &mut Self, entity: &Entity) {
+    /// Moves an Entity from Self to dst, for every row that self has. Dropping Components from rows that are not in dst.
+    pub fn move_entity_down(&mut self, dst: &mut Self, entity: &Entity) {
         // get entity position
         let position = self.get_entity_position(entity).unwrap();
 
@@ -220,7 +225,8 @@ impl Table {
             current_row.swap_remove(position);
         }
 
-        self.entities.swap_remove(position);
+        let removed = self.entities.swap_remove(position);
+        debug_assert_eq!(removed, *entity);
         dst.entities.push(*entity);
     }
 
@@ -268,6 +274,7 @@ impl Table {
         })
     }
 
+    #[inline]
     fn get_entity_position(&self, entity: &Entity) -> Option<usize> {
         self.entities.iter().position(|ent| ent == entity)
     }
@@ -474,6 +481,133 @@ impl<C: Component> std::ops::DerefMut for RowAccessMut<'_, C> {
 #[cfg(test)]
 mod tests {
 
+    use std::{any::TypeId, ops::Deref};
+
+    use crate::{
+        entity::{Entity, Generation},
+        table::RowAccessRef,
+    };
+
+    use super::Table;
+
     #[test]
-    fn test() {}
+    fn test_create_table() {
+        let table = Table::new::<u32>();
+        assert!(table.entities.is_empty());
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0].type_id, TypeId::of::<u32>());
+
+        let table = Table::new::<(u32, i32)>();
+        assert!(table.entities.is_empty());
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(table.rows[0].type_id, TypeId::of::<u32>());
+        assert_eq!(table.rows[1].type_id, TypeId::of::<i32>());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn test_create_table_panic() {
+        let table = Table::new::<(u32, u32)>();
+        assert!(table.entities.is_empty());
+        assert_eq!(table.rows.len(), 2);
+    }
+
+    #[test]
+    fn test_table_push_and_get() {
+        let mut table = Table::new::<(u32, i32)>();
+        let ent = Entity::new(0, Generation::new());
+
+        table.push(ent, (100u32, 200i32));
+
+        assert_eq!(&table.entities, &[ent]);
+        assert_eq!(table.len(), 1);
+
+        let row = table.try_get_row_ref::<u32>().unwrap();
+        let row = RowAccessRef::deref(&row);
+        assert_eq!(&row, &[100]);
+
+        let row = table.try_get_row_ref::<i32>().unwrap();
+        let row = RowAccessRef::deref(&row);
+        assert_eq!(&row, &[200]);
+    }
+
+    #[test]
+    fn test_push_or_update() {
+        let mut table = Table::new::<(u32, i32)>();
+        let ent = Entity::new(0, Generation::new());
+
+        table.entities.push(ent);
+        table.push_missing_or_update(&ent, (100u32, 200i32));
+
+        assert_eq!(&table.entities, &[ent]);
+        assert_eq!(table.len(), 1);
+
+        let row = table.try_get_row_ref::<u32>().unwrap();
+        let row = RowAccessRef::deref(&row);
+        assert_eq!(&row, &[100]);
+
+        let row = table.try_get_row_ref::<i32>().unwrap();
+        let row = RowAccessRef::deref(&row);
+        assert_eq!(&row, &[200]);
+    }
+
+    #[test]
+    fn test_table_move_up() {
+        let mut table_single = Table::new::<u32>();
+        let mut table_tuple = Table::new::<(u32, i32)>();
+        let ent = Entity::new(0, Generation::new());
+
+        table_single.push(ent, 100u32);
+
+        assert_eq!(&table_single.entities, &[ent]);
+        assert_eq!(table_single.len(), 1);
+
+        assert_eq!(&table_tuple.entities, &[]);
+        assert_eq!(table_tuple.len(), 0);
+
+        table_single.move_entity_up(&mut table_tuple, &ent);
+        table_tuple.push_missing_or_update(&ent, 200i32);
+
+        assert_eq!(&table_single.entities, &[]);
+        assert_eq!(table_single.len(), 0);
+
+        assert_eq!(&table_tuple.entities, &[ent]);
+        assert_eq!(table_tuple.len(), 1);
+
+        let row = table_tuple.try_get_row_ref::<u32>().unwrap();
+        let row = RowAccessRef::deref(&row);
+        assert_eq!(&row, &[100]);
+
+        let row = table_tuple.try_get_row_ref::<i32>().unwrap();
+        let row = RowAccessRef::deref(&row);
+        assert_eq!(&row, &[200]);
+    }
+
+    #[test]
+    fn test_table_move_down() {
+        let mut table_single = Table::new::<u32>();
+        let mut table_tuple = Table::new::<(u32, i32)>();
+        let ent = Entity::new(0, Generation::new());
+
+        table_tuple.push(ent, (100u32, 200i32));
+
+        assert_eq!(&table_tuple.entities, &[ent]);
+        assert_eq!(table_tuple.len(), 1);
+
+        assert_eq!(&table_single.entities, &[]);
+        assert_eq!(table_single.len(), 0);
+
+        table_tuple.move_entity_down(&mut table_single, &ent);
+
+        assert_eq!(&table_single.entities, &[ent]);
+        assert_eq!(table_single.len(), 1);
+
+        assert_eq!(&table_tuple.entities, &[]);
+        assert_eq!(table_tuple.len(), 0);
+
+        let row = table_single.try_get_row_ref::<u32>().unwrap();
+        let row = RowAccessRef::deref(&row);
+        assert_eq!(&row, &[100]);
+    }
 }
