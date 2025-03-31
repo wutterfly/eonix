@@ -3,6 +3,7 @@ use std::any::TypeId;
 use crate::{
     Scene,
     entity::{Entity, Generation},
+    macros::unwrap,
     table::{Table, TableId},
 };
 
@@ -73,7 +74,7 @@ impl<'a, E: Extract> Query<'a, E> {
 
     pub fn iter(&mut self) -> QueryIter<'a, '_, E> {
         let mut iter = self.tables.iter_mut();
-        let current = iter.next().unwrap().iter();
+        let current = unwrap!(iter.next()).iter();
 
         QueryIter::<'_, '_, E> {
             tables: iter,
@@ -166,7 +167,7 @@ pub trait RowAccess {
     where
         Self: 'a;
 
-    fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>>;
+    fn get_entity_components(&mut self, position: usize) -> Self::Item<'_>;
 
     type Iter<'a>: Iterator<Item = Self::Item<'a>>
     where

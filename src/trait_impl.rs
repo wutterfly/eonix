@@ -8,6 +8,7 @@ use crate::{
     Component,
     components::ComponentSet,
     entity::Entity,
+    macros::unwrap,
     query::{Extract, GetComponentAccess, RowAccess, TableAccess},
     table::{Row, RowAccessMut, RowAccessRef, Table, TableId, TableIdBuilder, TableIdent},
 };
@@ -38,22 +39,14 @@ const _: () = {
         fn update_rows(self, table: &mut Table, position: usize) {
             let a = self;
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<A>())
-                .unwrap()
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>()))
                 .update::<A>(position, a);
         }
 
         fn push_or_update(self, table: &mut Table, position: usize) {
             let a = self;
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<A>())
-                .unwrap()
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>()))
                 .push_or_update::<A>(position, a);
         }
     }
@@ -77,19 +70,9 @@ const _: () = {
 
             let (a, b) = self;
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<A>())
-                .unwrap()
-                .push(a);
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>())).push(a);
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<B>())
-                .unwrap()
-                .push(b);
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<B>())).push(b);
 
             table.entities.push(entity);
         }
@@ -99,18 +82,10 @@ const _: () = {
 
             let (a, b) = self;
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<A>())
-                .unwrap()
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>()))
                 .update::<A>(position, a);
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<B>())
-                .unwrap()
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<B>()))
                 .update::<B>(position, b);
         }
 
@@ -119,18 +94,10 @@ const _: () = {
 
             let (a, b) = self;
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<A>())
-                .unwrap()
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>()))
                 .push_or_update::<A>(position, a);
 
-            table
-                .rows
-                .iter_mut()
-                .find(|x| x.tid() == TypeId::of::<B>())
-                .unwrap()
+            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<B>()))
                 .push_or_update::<B>(position, b);
         }
     }
@@ -319,9 +286,9 @@ const _: () = {
 
         #[inline]
         fn get_entity(&mut self, entity: &Entity) -> Option<Self::Item<'_>> {
-            let position = self.entities.iter().position(|ent| ent == entity).unwrap();
+            let position = self.entities.iter().position(|ent| ent == entity)?;
 
-            self.table_rows.get_entity_components(position)
+            Some(self.table_rows.get_entity_components(position))
         }
 
         fn iter(&mut self) -> Self::Iter<'_> {
@@ -339,8 +306,8 @@ const _: () = {
             Self: 'a;
 
         #[inline]
-        fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>> {
-            RowAccessRef::deref(self).get(position)
+        fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
+            unwrap!(RowAccessRef::deref(self).get(position))
         }
 
         type Iter<'a>
@@ -361,8 +328,8 @@ const _: () = {
             Self: 'new;
 
         #[inline]
-        fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>> {
-            RowAccessMut::deref_mut(self).get_mut(position)
+        fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
+            unwrap!(RowAccessMut::deref_mut(self).get_mut(position))
         }
 
         type Iter<'a>
@@ -383,13 +350,13 @@ const _: () = {
             Self: 'a;
 
         #[inline]
-        fn get_entity_components(&mut self, position: usize) -> Option<Self::Item<'_>> {
+        fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
             let (a, b) = self;
 
-            Some((
-                a.get_entity_components(position)?,
-                b.get_entity_components(position)?,
-            ))
+            (
+                a.get_entity_components(position),
+                b.get_entity_components(position),
+            )
         }
 
         type Iter<'a>

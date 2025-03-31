@@ -12,6 +12,7 @@ use crate::{
     cells::{AtomicRefCell, MutGuard, RefGuard},
     components::ComponentSet,
     entity::Entity,
+    macros::unwrap,
 };
 
 pub trait TableIdent {
@@ -139,14 +140,14 @@ impl Table {
     pub fn update<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
         debug_assert_eq!(self.id, C::table_id());
 
-        let position = self.get_entity_position(entity).unwrap();
+        let position = self.get_entity_position(entity);
 
         // update components
         C::update_rows(components, self, position);
     }
 
     pub fn update_partial<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
-        let position = self.get_entity_position(entity).unwrap();
+        let position = self.get_entity_position(entity);
 
         C::update_rows(components, self, position);
     }
@@ -158,7 +159,7 @@ impl Table {
         debug_assert_eq!(self.id, C::table_id());
 
         // check if entity already in table
-        debug_assert!(self.get_entity_position(&entity).is_none());
+        debug_assert!(!self.entities.contains(&entity));
 
         C::push_to_table(components, self, entity);
     }
@@ -166,7 +167,7 @@ impl Table {
     /// Removes the Entity and all its components from the table.
     pub fn delete_entity(&mut self, entity: Entity) {
         // find entity position
-        let position = self.get_entity_position(&entity).unwrap();
+        let position = self.get_entity_position(&entity);
         let ent = self.entities[position];
 
         // remove all components
@@ -180,13 +181,13 @@ impl Table {
     }
 
     pub fn push_missing_or_update<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
-        let position = self.get_entity_position(entity).unwrap();
+        let position = self.get_entity_position(entity);
         C::push_or_update(components, self, position);
     }
 
     /// Moves an Entity from Self to dst, for every row that self has.
     pub fn move_entity_up(&mut self, dst: &mut Self, entity: &Entity) {
-        let position = self.get_entity_position(entity).unwrap();
+        let position = self.get_entity_position(entity);
 
         'outer: for src_row in &mut self.rows {
             for dst_row in &mut dst.rows {
@@ -207,7 +208,7 @@ impl Table {
     /// Moves an Entity from Self to dst, for every row that self has. Dropping Components from rows that are not in dst.
     pub fn move_entity_down(&mut self, dst: &mut Self, entity: &Entity) {
         // get entity position
-        let position = self.get_entity_position(entity).unwrap();
+        let position = self.get_entity_position(entity);
 
         //
         'outer: for current_row in &mut self.rows {
@@ -275,8 +276,11 @@ impl Table {
     }
 
     #[inline]
-    fn get_entity_position(&self, entity: &Entity) -> Option<usize> {
-        self.entities.iter().position(|ent| ent == entity)
+    fn get_entity_position(&self, entity: &Entity) -> usize {
+        self.entities
+            .iter()
+            .position(|ent| ent == entity)
+            .expect("This should have been checked")
     }
 }
 
@@ -358,7 +362,7 @@ impl Row {
 
     #[inline]
     pub fn get_mut<C: Component>(&mut self) -> &mut Vec<C> {
-        self.components.get_mut().downcast_mut::<Vec<C>>().unwrap()
+        unwrap!(self.components.get_mut().downcast_mut::<Vec<C>>())
     }
 
     #[inline]
@@ -388,7 +392,7 @@ impl Row {
     }
 
     fn v_swap_remove<C: Component>(&mut self, position: usize) {
-        let vec = self.components.get_mut().downcast_mut::<Vec<C>>().unwrap();
+        let vec = unwrap!(self.components.get_mut().downcast_mut::<Vec<C>>());
         vec.swap_remove(position);
     }
 
@@ -454,7 +458,7 @@ impl<C: Component> std::ops::Deref for RowAccessRef<'_, C> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.guard.downcast_ref::<Vec<C>>().unwrap()
+        unwrap!(self.guard.downcast_ref::<Vec<C>>())
     }
 }
 
@@ -468,13 +472,14 @@ impl<C: Component> std::ops::Deref for RowAccessMut<'_, C> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.guard.downcast_ref::<Vec<C>>().unwrap()
+        unwrap!(self.guard.downcast_ref::<Vec<C>>())
     }
 }
 
 impl<C: Component> std::ops::DerefMut for RowAccessMut<'_, C> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.guard.downcast_mut::<Vec<C>>().unwrap()
+        unwrap!(self.guard.downcast_mut::<Vec<C>>())
     }
 }
 

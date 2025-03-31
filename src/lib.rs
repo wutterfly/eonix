@@ -4,6 +4,7 @@
 mod cells;
 mod components;
 mod entity;
+mod macros;
 mod query;
 mod resources;
 mod scene;

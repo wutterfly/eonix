@@ -46,7 +46,7 @@ impl<T: ?Sized + Any> Resources<T> {
 
     pub fn get_resource<R: Any>(&self) -> Option<HandleRef<R>> {
         let type_id = TypeId::of::<R>();
-        let res = self.resources.get(&type_id).unwrap();
+        let res = self.resources.get(&type_id)?;
 
         let guard = res.borrow();
 
@@ -58,7 +58,7 @@ impl<T: ?Sized + Any> Resources<T> {
 
     pub fn get_resource_mut<R: Any>(&mut self) -> Option<HandleMut<R>> {
         let type_id = TypeId::of::<R>();
-        let res = self.resources.get_mut(&type_id).unwrap();
+        let res = self.resources.get_mut(&type_id)?;
 
         let guard = res.borrow_mut();
 

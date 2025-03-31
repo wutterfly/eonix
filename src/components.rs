@@ -2,6 +2,7 @@ use std::any::{Any, TypeId};
 
 use crate::{
     entity::{Entity, EntitySpawner, Generation},
+    macros::unwrap,
     table::{Table, TableId, TableIdent},
 };
 
@@ -73,7 +74,7 @@ impl EntityComponents {
 
     pub fn delete_entity(&mut self, entity: Entity) {
         // look up in what table the entity is
-        let (generation, table_id) = self.entities.get_mut(entity.id()).unwrap();
+        let (generation, table_id) = unwrap!(self.entities.get_mut(entity.id()));
 
         // entity is not valid
         let ent_gen = entity.generation();
@@ -82,12 +83,12 @@ impl EntityComponents {
         }
 
         // find table
-        let (pos, table) = self
-            .tables
-            .iter_mut()
-            .enumerate()
-            .find(|(_, table)| table.id() == *table_id)
-            .unwrap();
+        let (pos, table) = unwrap!(
+            self.tables
+                .iter_mut()
+                .enumerate()
+                .find(|(_, table)| table.id() == *table_id)
+        );
 
         // delete entity from table
         table.delete_entity(entity);
@@ -131,7 +132,7 @@ impl EntityComponents {
             {
                 Some(table_i) => {
                     // insert directly in correct table
-                    let target_table = self.tables.get_mut(table_i).unwrap();
+                    let target_table = unwrap!(self.tables.get_mut(table_i));
                     target_table.push(*entity, components);
                     return;
                 }
@@ -148,14 +149,13 @@ impl EntityComponents {
         }
 
         // get current table
-        let current_table_i = self
-            .tables
-            .iter_mut()
-            .position(|table| table.id() == *in_table)
-            // entity and TableId are valid, so this table has to exist
-            .unwrap();
+        let current_table_i = unwrap!(
+            self.tables
+                .iter_mut()
+                .position(|table| table.id() == *in_table)
+        );
 
-        let current_table = self.tables.get_mut(current_table_i).unwrap();
+        let current_table = unwrap!(self.tables.get_mut(current_table_i));
 
         // same components, just update table
         if *in_table == component_table_id {
@@ -190,7 +190,7 @@ impl EntityComponents {
 
         // find table to push ComponentSet in
         let target_table_i = target_table_index.unwrap_or_else(|| {
-            let current_table = self.tables.get(current_table_i).unwrap();
+            let current_table = unwrap!(self.tables.get(current_table_i));
 
             // get a fresh/empty clone of the current table
             // use already computed types and id here
@@ -207,10 +207,10 @@ impl EntityComponents {
         });
 
         // get disjoint
-        let [current_table, target_table] = self
-            .tables
-            .get_disjoint_mut([current_table_i, target_table_i])
-            .unwrap();
+        let [current_table, target_table] = unwrap!(
+            self.tables
+                .get_disjoint_mut([current_table_i, target_table_i])
+        );
 
         // move entity and components from current table to target table
         current_table.move_entity_up(target_table, &entity);
@@ -238,11 +238,7 @@ impl EntityComponents {
             return;
         }
 
-        let current_table_i = self
-            .tables
-            .iter()
-            .position(|table| table.id() == *in_table)
-            .unwrap();
+        let current_table_i = unwrap!(self.tables.iter().position(|table| table.id() == *in_table));
 
         let current_table = &self.tables[current_table_i];
 
@@ -266,7 +262,7 @@ impl EntityComponents {
             .iter()
             .position(|table| table.id() == target_table_id)
             .unwrap_or_else(|| {
-                let current_table = self.tables.get(current_table_i).unwrap();
+                let current_table = unwrap!(self.tables.get(current_table_i));
 
                 // get a fresh/empty clone of the current table
                 // use already computed types and id here
@@ -284,10 +280,10 @@ impl EntityComponents {
             });
 
         // get disjoint
-        let [current_table, target_table] = self
-            .tables
-            .get_disjoint_mut([current_table_i, target_table_i])
-            .unwrap();
+        let [current_table, target_table] = unwrap!(
+            self.tables
+                .get_disjoint_mut([current_table_i, target_table_i])
+        );
 
         current_table.move_entity_down(target_table, entity);
 
