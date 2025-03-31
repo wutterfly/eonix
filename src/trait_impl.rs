@@ -8,7 +8,7 @@ use crate::{
     Component,
     components::ComponentSet,
     entity::Entity,
-    macros::unwrap,
+    macros::{component_set_impl, extract_impl, row_access_impl, table_ident_impl, unwrap},
     query::{Extract, GetComponentAccess, RowAccess, TableAccess},
     table::{Row, RowAccessMut, RowAccessRef, Table, TableId, TableIdBuilder, TableIdent},
 };
@@ -31,6 +31,7 @@ const _: () = {
             Self: Sized,
         {
             debug_assert_eq!(table.rows.len(), 1);
+            debug_assert_eq!(table.rows[0].tid(), TypeId::of::<A>());
 
             table.rows[0].push(self);
             table.entities.push(entity);
@@ -51,130 +52,34 @@ const _: () = {
         }
     }
 
-    impl<A: Component, B: Component> ComponentSet for (A, B) {
-        #[inline]
-        fn types() -> Vec<TypeId> {
-            vec![TypeId::of::<A>(), TypeId::of::<B>()]
-        }
+    component_set_impl!(A, B);
+    component_set_impl!(A, B, C);
+    component_set_impl!(A, B, C, D);
+    component_set_impl!(A, B, C, D, E);
+    component_set_impl!(A, B, C, D, E, F);
 
-        #[inline]
-        fn contains_type(type_id: TypeId) -> bool {
-            type_id == TypeId::of::<A>() || type_id == TypeId::of::<B>()
-        }
-
-        fn push_to_table(self, table: &mut Table, entity: Entity)
-        where
-            Self: Sized,
-        {
-            debug_assert_eq!(table.rows.len(), 2);
-
-            let (a, b) = self;
-
-            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>())).push(a);
-
-            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<B>())).push(b);
-
-            table.entities.push(entity);
-        }
-
-        fn update_rows(self, table: &mut Table, position: usize) {
-            debug_assert!(table.rows.len() >= 2);
-
-            let (a, b) = self;
-
-            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>()))
-                .update::<A>(position, a);
-
-            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<B>()))
-                .update::<B>(position, b);
-        }
-
-        fn push_or_update(self, table: &mut Table, position: usize) {
-            debug_assert_eq!(table.rows.len(), 2);
-
-            let (a, b) = self;
-
-            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<A>()))
-                .push_or_update::<A>(position, a);
-
-            unwrap!(table.rows.iter_mut().find(|x| x.tid() == TypeId::of::<B>()))
-                .push_or_update::<B>(position, b);
-        }
+    #[cfg(feature = "large_tuples")]
+    {
+        component_set_impl!(A, B, C, D, E, F, G);
+        component_set_impl!(A, B, C, D, E, F, G, H);
+        component_set_impl!(A, B, C, D, E, F, G, H, I);
     }
 };
 
 // TableIdent
 const _: () = {
-    impl<A: Component> TableIdent for A {
-        fn table_id() -> TableId {
-            let mut builder = TableIdBuilder::new();
+    table_ident_impl!(A);
+    table_ident_impl!(A, B);
+    table_ident_impl!(A, B, C);
+    table_ident_impl!(A, B, C, D);
+    table_ident_impl!(A, B, C, D, E);
+    table_ident_impl!(A, B, C, D, E, F);
 
-            builder.add_unqiue(TypeId::of::<A>());
-
-            builder.finish()
-        }
-
-        fn row_count() -> usize {
-            1
-        }
-
-        fn rows() -> Box<[Row]> {
-            Box::new([Row::new::<Self>()])
-        }
-    }
-
-    impl<A: Component, B: Component> TableIdent for (A, B) {
-        #[inline]
-        fn validate() {
-            unique_tuple(&[TypeId::of::<A>(), TypeId::of::<B>()]);
-        }
-
-        fn table_id() -> TableId {
-            debug_assert!({
-                let slice = [TypeId::of::<A>(), TypeId::of::<B>()];
-                !(1..slice.len()).any(|i| slice[i..].contains(&slice[i - 1]))
-            });
-
-            let mut builder = TableIdBuilder::new();
-
-            builder.add_unqiue(TypeId::of::<A>());
-            builder.add_unqiue(TypeId::of::<B>());
-
-            builder.finish()
-        }
-
-        fn row_count() -> usize {
-            0 + 1 + 1
-        }
-
-        fn rows() -> Box<[Row]> {
-            Box::new([Row::new::<A>(), Row::new::<B>()])
-        }
-    }
-
-    impl<A: Component, B: Component, C: Component> TableIdent for (A, B, C) {
-        #[inline]
-        fn validate() {
-            unique_tuple(&[TypeId::of::<A>(), TypeId::of::<B>(), TypeId::of::<C>()]);
-        }
-
-        fn table_id() -> TableId {
-            let mut builder = TableIdBuilder::new();
-
-            builder.add_unqiue(TypeId::of::<A>());
-            builder.add_unqiue(TypeId::of::<B>());
-            builder.add_unqiue(TypeId::of::<C>());
-
-            builder.finish()
-        }
-
-        fn row_count() -> usize {
-            0 + 1 + 1 + 1
-        }
-
-        fn rows() -> Box<[Row]> {
-            Box::new([Row::new::<A>(), Row::new::<B>(), Row::new::<C>()])
-        }
+    #[cfg(feature = "large_tuples")]
+    {
+        table_ident_impl!(A, B, C, D, E, F, G);
+        table_ident_impl!(A, B, C, D, E, F, G, H);
+        table_ident_impl!(A, B, C, D, E, F, G, H, I);
     }
 };
 
@@ -242,27 +147,17 @@ const _: () = {
         }
     }
 
-    impl<A: Extract, B: Extract> Extract for (A, B) {
-        type Extracted<'new> = TableAccess<'new, Self::RowOnly<'new>>;
-        type RowOnly<'new> = (A::RowOnly<'new>, B::RowOnly<'new>);
+    extract_impl!(A, B);
+    extract_impl!(A, B, C);
+    extract_impl!(A, B, C, D);
+    extract_impl!(A, B, C, D, E);
+    extract_impl!(A, B, C, D, E, F);
 
-        #[inline]
-        fn validate() {
-            unique_tuple(&[A::raw_type(), B::raw_type()]);
-        }
-
-        #[inline]
-        fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()> {
-            let entities = &table.entities;
-
-            let access = TableAccess {
-                table_id: table.id(),
-                entities,
-                table_rows: (A::get_row_only(table)?, B::get_row_only(table)?),
-            };
-
-            Ok(access)
-        }
+    #[cfg(feature = "large_tuples")]
+    {
+        extract_impl!(A, B, C, D, E, F, G);
+        extract_impl!(A, B, C, D, E, F, G, H);
+        extract_impl!(A, B, C, D, E, F, G, H, I);
     }
 };
 
@@ -372,16 +267,28 @@ const _: () = {
             a.get_iter().zip(b.get_iter())
         }
     }
+
+    row_access_impl!(A, B, C);
+    row_access_impl!(A, B, C, D);
+    row_access_impl!(A, B, C, D, E);
+    row_access_impl!(A, B, C, D, E, F);
+
+    #[cfg(feature = "large_tuples")]
+    {
+        row_access_impl!(A, B, C, D, E, F, G);
+        row_access_impl!(A, B, C, D, E, F, G, H);
+        row_access_impl!(A, B, C, D, E, F, G, H, I);
+    }
 };
 
 #[inline]
 fn unique_tuple<const N: usize>(_types: &[TypeId; N]) {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "runtime-checks")]
     {
         for (i, t1) in _types.iter().enumerate() {
             for (j, t2) in _types.iter().enumerate() {
                 if i != j {
-                    debug_assert_ne!(t1, t2)
+                    assert_ne!(t1, t2)
                 }
             }
         }

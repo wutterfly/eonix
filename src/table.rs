@@ -40,15 +40,14 @@ impl TableId {
         self.0 == 0 && self.1 == 0
     }
 
-    #[allow(clippy::debug_assert_with_mut_call)]
     pub fn from_uniques<'a>(set: impl Iterator<Item = &'a TypeId>) -> Self {
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "runtime-checks")]
         let mut check = std::collections::HashSet::<TypeId>::new();
 
         let mut builder = TableIdBuilder::new();
 
         for id in set {
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "runtime-checks")]
             debug_assert!(check.insert(*id));
             builder.add_unqiue(*id);
         }
@@ -426,7 +425,7 @@ impl ExtendableTable {
     }
 
     pub fn finish(self) -> Table {
-        self.debug_check();
+        self.check();
 
         Table {
             id: self.id,
@@ -436,14 +435,15 @@ impl ExtendableTable {
     }
 
     #[inline]
-    fn debug_check(&self) {
-        if cfg!(debug_assertions) {
+    fn check(&self) {
+        #[cfg(feature = "runtime-checks")]
+        {
             let mut builder = TableIdBuilder::new();
             for t in self.rows.iter().map(Row::tid) {
                 builder.add_unqiue(t);
             }
             let id = builder.finish();
-            debug_assert_eq!(self.id, id);
+            assert_eq!(self.id, id);
         }
     }
 }
@@ -509,7 +509,7 @@ mod tests {
         assert_eq!(table.rows[1].type_id, TypeId::of::<i32>());
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "runtime-checks")]
     #[test]
     #[should_panic]
     fn test_create_table_panic() {
