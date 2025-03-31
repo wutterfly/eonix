@@ -19,6 +19,8 @@ impl<'a, E: Extract> Query<'a, E> {
 
         let extracted_tables = Self::extract_tables(&scene.entities.tables)?;
 
+        debug_assert!(extracted_tables.len() > 0);
+
         Ok(Self {
             tables: extracted_tables,
             entities: &scene.entities.entities,
@@ -33,12 +35,16 @@ impl<'a, E: Extract> Query<'a, E> {
 
         let mut out = Vec::with_capacity(tables.len());
         for table in tables {
+            if table.is_empty() {
+                continue;
+            }
+
             if let Ok(access) = E::extract(table) {
                 out.push(access);
             }
         }
 
-        if tables.is_empty() {
+        if out.is_empty() {
             return Err(());
         }
 

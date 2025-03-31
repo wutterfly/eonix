@@ -2,6 +2,7 @@
 #![warn(clippy::cargo)]
 
 mod cells;
+mod commands;
 mod components;
 mod entity;
 mod macros;
@@ -14,7 +15,9 @@ mod world;
 
 pub use cells::AtomicRefCell;
 pub use components::Component;
+pub use entity::Entity;
 pub use query::Query;
+pub use resources::{NoSend, Resource};
 pub use scene::Scene;
 pub use world::World;
 
