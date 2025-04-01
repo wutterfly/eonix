@@ -28,6 +28,56 @@ fn test_query_get() {
 }
 
 #[test]
+fn test_query_get_optional() {
+    let mut world = World::new();
+
+    let scene = world.current_scene_mut();
+    let mut ents = Vec::with_capacity(100);
+
+    for i in 0..10 {
+        let entity = scene.spawn_entity();
+
+        if i % 2 == 0 {
+            scene.add_component(&entity, (C1(i), C2(i + 100)));
+        } else {
+            scene.add_component(&entity, C1(i));
+        }
+
+        ents.push(entity);
+    }
+
+    let mut query = Query::<(&C1, Option<&mut C2>)>::new(&scene).unwrap();
+    assert_eq!(query.table_count(), 2);
+
+    for (i, ent) in ents.iter().enumerate() {
+        let (c1, c2) = query.get_entity_components(ent).unwrap();
+
+        if i % 2 == 0 {
+            assert_eq!(c1.0, i as u32);
+            assert_eq!(c2.unwrap().0, i as u32 + 100);
+        } else {
+            assert_eq!(c1.0, i as u32);
+        }
+    }
+
+    drop(query);
+
+    let mut query = Query::<(&C1, Option<&C2>)>::new(&scene).unwrap();
+    assert_eq!(query.table_count(), 2);
+
+    for (i, ent) in ents.iter().enumerate() {
+        let (c1, c2) = query.get_entity_components(ent).unwrap();
+
+        if i % 2 == 0 {
+            assert_eq!(c1.0, i as u32);
+            assert_eq!(c2.unwrap().0, i as u32 + 100);
+        } else {
+            assert_eq!(c1.0, i as u32);
+        }
+    }
+}
+
+#[test]
 fn test_add_components() {
     let mut world = World::new();
 

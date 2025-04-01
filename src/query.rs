@@ -132,13 +132,30 @@ impl<'a, 'b, E: Extract> Iterator for QueryIter<'a, 'b, E> {
     }
 }
 
+pub enum NoneIter<I: Iterator> {
+    Iter(I),
+    None,
+}
+
+impl<I: Iterator> Iterator for NoneIter<I> {
+    type Item = Option<I::Item>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Iter(iter_mut) => Some(iter_mut.next()),
+            Self::None => Some(None),
+        }
+    }
+}
+
 pub trait Extract {
     type Extracted<'new>: GetComponentAccess;
 
     type RowOnly<'new>: RowAccess;
 
     #[inline]
-    fn raw_type() -> TypeId {
+    fn raw_type() -> (TypeId, bool) {
         unimplemented!()
     }
 
@@ -180,4 +197,41 @@ pub trait RowAccess {
         Self: 'a;
 
     fn get_iter(&mut self) -> Self::Iter<'_>;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    use crate::Scene;
+
+    use super::Query;
+
+    #[cfg(feature = "runtime-checks")]
+    #[test]
+    fn test_invalid_same_type() {
+        let scene = Scene::new();
+
+        let res = catch_unwind(AssertUnwindSafe(|| {
+            let _ = Query::<(&u32, &u32)>::new(&scene);
+        }));
+
+        assert!(res.is_err());
+    }
+
+    #[cfg(feature = "runtime-checks")]
+    #[test]
+    fn test_invalid_only_optional() {
+        let scene = Scene::new();
+
+        let res = catch_unwind(AssertUnwindSafe(|| {
+            let _ = Query::<Option<&u32>>::new(&scene);
+        }));
+        assert!(res.is_err());
+
+        let res = catch_unwind(AssertUnwindSafe(|| {
+            let _ = Query::<(Option<&u32>, Option<&i32>)>::new(&scene);
+        }));
+        assert!(res.is_err());
+    }
 }

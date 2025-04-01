@@ -9,7 +9,7 @@ use crate::{
     components::ComponentSet,
     entity::Entity,
     macros::{component_set_impl, extract_impl, row_access_impl, table_ident_impl, unwrap},
-    query::{Extract, GetComponentAccess, RowAccess, TableAccess},
+    query::{Extract, GetComponentAccess, NoneIter, RowAccess, TableAccess},
     table::{Row, RowAccessMut, RowAccessRef, Table, TableId, TableIdBuilder, TableIdent},
 };
 
@@ -90,8 +90,8 @@ const _: () = {
         type RowOnly<'new> = RowAccessRef<'new, C>;
 
         #[inline]
-        fn raw_type() -> TypeId {
-            TypeId::of::<C>()
+        fn raw_type() -> (TypeId, bool) {
+            (TypeId::of::<C>(), true)
         }
 
         #[inline]
@@ -121,8 +121,8 @@ const _: () = {
         type RowOnly<'new> = RowAccessMut<'new, C>;
 
         #[inline]
-        fn raw_type() -> TypeId {
-            TypeId::of::<C>()
+        fn raw_type() -> (TypeId, bool) {
+            (TypeId::of::<C>(), true)
         }
 
         #[inline]
@@ -144,6 +144,74 @@ const _: () = {
         #[inline]
         fn get_row_only(table: &'_ Table) -> Result<Self::RowOnly<'_>, ()> {
             table.try_get_row_mut()
+        }
+    }
+
+    impl<C: Component> Extract for Option<&C> {
+        type Extracted<'new> = TableAccess<'new, Self::RowOnly<'new>>;
+        type RowOnly<'new> = Option<RowAccessRef<'new, C>>;
+
+        #[inline]
+        fn raw_type() -> (TypeId, bool) {
+            (TypeId::of::<C>(), false)
+        }
+
+        #[inline]
+        fn validate() {
+            #[cfg(feature = "runtime-checks")]
+            assert!(false);
+        }
+
+        #[inline]
+        fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()> {
+            let entities = &table.entities;
+
+            let access = TableAccess {
+                table_id: table.id(),
+                entities,
+                table_rows: Self::get_row_only(table)?,
+            };
+
+            Ok(access)
+        }
+
+        #[inline]
+        fn get_row_only(table: &'_ Table) -> Result<Self::RowOnly<'_>, ()> {
+            Ok(table.try_get_row_ref().ok())
+        }
+    }
+
+    impl<C: Component> Extract for Option<&mut C> {
+        type Extracted<'new> = TableAccess<'new, Self::RowOnly<'new>>;
+        type RowOnly<'new> = Option<RowAccessMut<'new, C>>;
+
+        #[inline]
+        fn raw_type() -> (TypeId, bool) {
+            (TypeId::of::<C>(), false)
+        }
+
+        #[inline]
+        fn validate() {
+            #[cfg(feature = "runtime-checks")]
+            assert!(false);
+        }
+
+        #[inline]
+        fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()> {
+            let entities = &table.entities;
+
+            let access = TableAccess {
+                table_id: table.id(),
+                entities,
+                table_rows: Self::get_row_only(table)?,
+            };
+
+            Ok(access)
+        }
+
+        #[inline]
+        fn get_row_only(table: &'_ Table) -> Result<Self::RowOnly<'_>, ()> {
+            Ok(table.try_get_row_mut().ok())
         }
     }
 
@@ -186,6 +254,7 @@ const _: () = {
             Some(self.table_rows.get_entity_components(position))
         }
 
+        #[inline]
         fn iter(&mut self) -> Self::Iter<'_> {
             self.table_rows.get_iter()
         }
@@ -235,6 +304,62 @@ const _: () = {
         #[inline]
         fn get_iter(&mut self) -> Self::Iter<'_> {
             RowAccessMut::deref_mut(self).iter_mut()
+        }
+    }
+
+    impl<C: Component> RowAccess for Option<RowAccessRef<'_, C>> {
+        type Item<'a>
+            = Option<&'a C>
+        where
+            Self: 'a;
+
+        #[inline]
+        fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
+            match self {
+                Some(row) => Some(unwrap!(RowAccessRef::deref(row).get(position))),
+                None => None,
+            }
+        }
+
+        type Iter<'a>
+            = NoneIter<std::slice::Iter<'a, C>>
+        where
+            Self: 'a;
+
+        #[inline]
+        fn get_iter(&mut self) -> Self::Iter<'_> {
+            match self {
+                Some(row) => NoneIter::Iter(row.get_iter()),
+                None => NoneIter::None,
+            }
+        }
+    }
+
+    impl<C: Component> RowAccess for Option<RowAccessMut<'_, C>> {
+        type Item<'new>
+            = Option<&'new mut C>
+        where
+            Self: 'new;
+
+        #[inline]
+        fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
+            match self {
+                Some(row) => Some(unwrap!(RowAccessMut::deref_mut(row).get_mut(position))),
+                None => None,
+            }
+        }
+
+        type Iter<'a>
+            = NoneIter<std::slice::IterMut<'a, C>>
+        where
+            Self: 'a;
+
+        #[inline]
+        fn get_iter(&mut self) -> Self::Iter<'_> {
+            match self {
+                Some(row) => NoneIter::Iter(row.get_iter()),
+                None => NoneIter::None,
+            }
         }
     }
 

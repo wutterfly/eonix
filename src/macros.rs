@@ -207,9 +207,17 @@ macro_rules! extract_impl {
                 fn validate() {
                     unique_tuple(&[
                         $(
-                            $ty::raw_type()
+                            $ty::raw_type().0
                         ),+
                     ]);
+
+                    #[cfg(feature = "runtime-checks")]
+                    assert!(
+                        false
+                        $(
+                            || $ty::raw_type().1
+                        )+
+                    );
                 }
 
                 #[inline]
