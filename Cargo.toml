@@ -12,4 +12,5 @@ rustc-hash = "2.1.1"
 [features]
 default = ["runtime-checks"]
 large_tuples = []
-runtime-checks = []
+runtime-checks = ["debug-utils"]
+debug-utils = []

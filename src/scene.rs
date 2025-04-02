@@ -1,4 +1,7 @@
-use std::any::{Any, TypeId};
+use std::{
+    any::{Any, TypeId},
+    marker::PhantomData,
+};
 
 use crate::{
     components::{
@@ -7,13 +10,13 @@ use crate::{
     },
     entity::{Entity, EntitySpawner},
     resources::{
-        NoSend, Res, ResMut, Resource, ResourceStorageModifier, Resources, Unsend, UnsendMut,
+        NoSend, Res, ResMut, Resource, ResourceStorageModifier, Resources, UnsendMut, UnsendRef,
     },
 };
 
 pub struct Scene {
-    resources: Resources<dyn Resource>,
-    nosend: Resources<dyn NoSend>,
+    pub(crate) resources: Resources<dyn Resource>,
+    pub(crate) unsend: Resources<dyn NoSend>,
 
     pub(crate) entities: EntityComponents,
 }
@@ -23,8 +26,25 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             resources: Resources::new(),
-            nosend: Resources::new(),
+            unsend: Resources::new(),
             entities: EntityComponents::new(),
+        }
+    }
+
+    #[inline]
+    pub const fn send_scene(&self) -> SendScene {
+        SendScene {
+            resources: &self.resources,
+            entities: &self.entities,
+        }
+    }
+
+    #[inline]
+    pub const fn send_scene2(&self) -> SendScene2 {
+        SendScene2 {
+            resources: &self.resources,
+            entities: &self.entities,
+            _p: PhantomData,
         }
     }
 
@@ -83,14 +103,14 @@ impl Scene {
 
     #[inline]
     pub fn get_resource_ref<R: Resource>(&self) -> Option<Res<R>> {
-        let handle = self.resources.get_resource::<R>()?;
-        Some(Res { handle })
+        let handle = self.resources.get_resource_ref::<R>()?.into();
+        Some(handle)
     }
 
     #[inline]
     pub fn get_resource_mut<R: Resource>(&self) -> Option<ResMut<R>> {
-        let handle = self.resources.get_resource_mut::<R>()?;
-        Some(ResMut { handle })
+        let handle = self.resources.get_resource_mut::<R>()?.into();
+        Some(handle)
     }
 
     #[inline]
@@ -100,19 +120,19 @@ impl Scene {
 
     #[inline]
     pub fn insert_nosend_resource<R: NoSend>(&mut self, res: R) {
-        self.nosend.insert_resource(res);
+        self.unsend.insert_resource(res);
     }
 
     #[inline]
-    pub fn get_nosend_resource_ref<R: NoSend>(&self) -> Option<Unsend<R>> {
-        let handle = self.nosend.get_resource::<R>()?;
-        Some(Unsend { handle })
+    pub fn get_nosend_resource_ref<R: NoSend>(&self) -> Option<UnsendRef<R>> {
+        let handle = self.unsend.get_resource_ref::<R>()?.into();
+        Some(handle)
     }
 
     #[inline]
     pub fn get_nosend_resource_mut<R: NoSend>(&mut self) -> Option<UnsendMut<R>> {
-        let handle = self.nosend.get_resource_mut::<R>()?;
-        Some(UnsendMut { handle })
+        let handle = self.unsend.get_resource_mut::<R>()?.into();
+        Some(handle)
     }
 }
 
@@ -120,5 +140,43 @@ impl Default for Scene {
     #[inline]
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct SendScene<'a> {
+    pub(crate) resources: &'a Resources<dyn Resource>,
+
+    pub(crate) entities: &'a EntityComponents,
+}
+
+impl<'a> SendScene<'a> {
+    #[inline]
+    pub fn get_resource_ref<R: Resource>(&'_ self) -> Option<Res<'a, R>> {
+        Some(self.resources.get_resource_ref::<R>()?.into())
+    }
+
+    #[inline]
+    pub fn get_resource_mut<R: Resource>(&'_ self) -> Option<ResMut<'a, R>> {
+        Some(self.resources.get_resource_mut::<R>()?.into())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SendScene2<'a> {
+    pub(crate) resources: *const Resources<dyn Resource>,
+
+    pub(crate) entities: *const EntityComponents,
+
+    _p: PhantomData<&'a ()>,
+}
+
+impl SendScene2<'_> {
+    #[inline]
+    pub const fn send_scene(&self) -> SendScene {
+        SendScene {
+            resources: unsafe { self.resources.as_ref() }.unwrap(),
+            entities: unsafe { self.entities.as_ref() }.unwrap(),
+        }
     }
 }

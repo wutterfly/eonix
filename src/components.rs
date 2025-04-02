@@ -167,14 +167,14 @@ impl EntityComponents {
 
         // same components, just update table
         if *in_table == component_table_id {
-            current_table.update::<C>(&entity, components);
+            current_table.update::<C>(entity, components);
             return;
         }
 
         // ComponentSet is subset of current table (no move, just update/override)
         let types = C::types();
         if current_table.contains_all(&types) {
-            current_table.update_partial::<C>(&entity, components);
+            current_table.update_partial::<C>(entity, components);
             return;
         }
 
@@ -221,10 +221,10 @@ impl EntityComponents {
         );
 
         // move entity and components from current table to target table
-        current_table.move_entity_up(target_table, &entity);
+        current_table.move_entity_up(target_table, entity);
 
         // push missing component and/or override already existing
-        target_table.push_missing_or_update(&entity, components);
+        target_table.push_missing_or_update(entity, components);
 
         *in_table = target_table_id;
     }
@@ -345,7 +345,7 @@ impl EntityComponents {
         );
 
         // move entity and components from current table to target table
-        current_table.move_entity_up(target_table, &entity);
+        current_table.move_entity_up(target_table, entity);
 
         // push missing component and/or override already existing
         (modifier.push_missing_or_update)(target_table, entity, components);

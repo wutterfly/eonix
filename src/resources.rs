@@ -9,7 +9,7 @@ use crate::cells::{AtomicRefCell, MutGuard, RefGuard};
 /// A trait representing a type erased resource.
 pub type UntypedResource = dyn Any + Send + Sync;
 
-pub trait Resource: Any + Send + Sync {}
+pub trait Resource: Any + Send + Sync + 'static {}
 
 pub trait NoSend: Any {}
 
@@ -47,7 +47,7 @@ impl<T: ?Sized + Any> Resources<T> {
         }
     }
 
-    pub fn get_resource<R: Any>(&self) -> Option<HandleRef<R>> {
+    pub fn get_resource_ref<R: Any>(&self) -> Option<HandleRef<R>> {
         let type_id = TypeId::of::<R>();
         let res = self.resources.get(&type_id)?;
 
@@ -149,7 +149,7 @@ macro_rules! impl_res {
     // Ref
     ($ident: ident, $handle: ident, $bound: ident, -) => {
         pub struct $ident<'a, R: $bound> {
-            pub handle: $handle<'a, R>,
+            handle: $handle<'a, R>,
         }
 
         impl<R: $bound> std::ops::Deref for $ident<'_, R> {
@@ -158,6 +158,13 @@ macro_rules! impl_res {
             #[inline]
             fn deref(&self) -> &Self::Target {
                 $handle::deref(&self.handle)
+            }
+        }
+
+        impl<'a, R: $bound> From<$handle<'a, R>> for $ident<'a, R> {
+            #[inline]
+            fn from(value: $handle<'a, R>) -> Self {
+                Self { handle: value }
             }
         }
     };
@@ -183,15 +190,22 @@ macro_rules! impl_res {
                 $handle::deref_mut(&mut self.handle)
             }
         }
+
+        impl<'a, R: $bound> From<$handle<'a, R>> for $ident<'a, R> {
+            #[inline]
+            fn from(value: $handle<'a, R>) -> Self {
+                Self { handle: value }
+            }
+        }
     };
 }
 
 impl_res!(Res, HandleRef, Resource, -);
 impl_res!(ResMut, HandleMut, Resource, !);
-impl_res!(Unsend, HandleRef, NoSend, -);
+impl_res!(UnsendRef, HandleRef, NoSend, -);
 impl_res!(UnsendMut, HandleMut, NoSend, !);
 
 impl_res!(GlobalRes, HandleRef, Resource, -);
 impl_res!(GlobalResMut, HandleMut, Resource, !);
-impl_res!(GlobalUnsend, HandleRef, NoSend, -);
+impl_res!(GlobalUnsendRef, HandleRef, NoSend, -);
 impl_res!(GlobalUnsendMut, HandleMut, NoSend, !);

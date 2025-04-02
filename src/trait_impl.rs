@@ -1,16 +1,25 @@
 use std::{
-    any::TypeId,
+    any::{TypeId, type_name},
     iter::Zip,
     ops::{Deref, DerefMut},
 };
 
 use crate::{
-    Component,
+    Commands, Component, NoSend, Query, Resource, World,
+    cells::{WorldCellComplete, WorldCellSend},
     components::ComponentSet,
     entity::Entity,
-    macros::{component_set_impl, extract_impl, row_access_impl, table_ident_impl, unwrap},
+    macros::{
+        component_set_impl, extract_impl, row_access_impl, system_impl, table_ident_impl, unwrap,
+    },
     query::{Extract, GetComponentAccess, NoneIter, RowAccess, TableAccess},
+    resources::{
+        GlobalRes, GlobalResMut, GlobalUnsendMut, GlobalUnsendRef, Res, ResMut, UnsendMut,
+        UnsendRef,
+    },
+    system::{FunctionSystem, IntoSystem, ParamType, System, SystemParam},
     table::{Row, RowAccessMut, RowAccessRef, Table, TableId, TableIdBuilder, TableIdent},
+    world::SendWorld,
 };
 
 // ComponentSet
@@ -90,8 +99,13 @@ const _: () = {
         type RowOnly<'new> = RowAccessRef<'new, C>;
 
         #[inline]
-        fn raw_type() -> (TypeId, bool) {
+        fn raw_unit_type() -> (TypeId, bool) {
             (TypeId::of::<C>(), true)
+        }
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_shared::<C>()]
         }
 
         #[inline]
@@ -121,8 +135,13 @@ const _: () = {
         type RowOnly<'new> = RowAccessMut<'new, C>;
 
         #[inline]
-        fn raw_type() -> (TypeId, bool) {
+        fn raw_unit_type() -> (TypeId, bool) {
             (TypeId::of::<C>(), true)
+        }
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_mut::<C>()]
         }
 
         #[inline]
@@ -152,8 +171,13 @@ const _: () = {
         type RowOnly<'new> = Option<RowAccessRef<'new, C>>;
 
         #[inline]
-        fn raw_type() -> (TypeId, bool) {
+        fn raw_unit_type() -> (TypeId, bool) {
             (TypeId::of::<C>(), false)
+        }
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_shared::<C>()]
         }
 
         #[inline]
@@ -186,8 +210,13 @@ const _: () = {
         type RowOnly<'new> = Option<RowAccessMut<'new, C>>;
 
         #[inline]
-        fn raw_type() -> (TypeId, bool) {
+        fn raw_unit_type() -> (TypeId, bool) {
             (TypeId::of::<C>(), false)
+        }
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_mut::<C>()]
         }
 
         #[inline]
@@ -315,10 +344,13 @@ const _: () = {
 
         #[inline]
         fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
-            match self {
-                Some(row) => Some(unwrap!(RowAccessRef::deref(row).get(position))),
-                None => None,
-            }
+            let row = self.as_mut()?;
+            let out = RowAccessRef::deref(row).get(position);
+
+            #[cfg(feature = "runtime-checks")]
+            assert!(out.is_some());
+
+            out
         }
 
         type Iter<'a>
@@ -328,10 +360,8 @@ const _: () = {
 
         #[inline]
         fn get_iter(&mut self) -> Self::Iter<'_> {
-            match self {
-                Some(row) => NoneIter::Iter(row.get_iter()),
-                None => NoneIter::None,
-            }
+            self.as_mut()
+                .map_or(NoneIter::None, |row| NoneIter::Iter(row.get_iter()))
         }
     }
 
@@ -343,10 +373,13 @@ const _: () = {
 
         #[inline]
         fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
-            match self {
-                Some(row) => Some(unwrap!(RowAccessMut::deref_mut(row).get_mut(position))),
-                None => None,
-            }
+            let row = self.as_mut()?;
+            let out = RowAccessMut::deref_mut(row).get_mut(position);
+
+            #[cfg(feature = "runtime-checks")]
+            assert!(out.is_some());
+
+            out
         }
 
         type Iter<'a>
@@ -356,10 +389,8 @@ const _: () = {
 
         #[inline]
         fn get_iter(&mut self) -> Self::Iter<'_> {
-            match self {
-                Some(row) => NoneIter::Iter(row.get_iter()),
-                None => NoneIter::None,
-            }
+            self.as_mut()
+                .map_or(NoneIter::None, |row| NoneIter::Iter(row.get_iter()))
         }
     }
 
@@ -404,6 +435,300 @@ const _: () = {
         row_access_impl!(A, B, C, D, E, F, G, H);
         row_access_impl!(A, B, C, D, E, F, G, H, I);
     }
+};
+
+// SystemParam
+const _: () = {
+    impl<R: Resource> SystemParam for Res<'_, R> {
+        type Item<'new> = Res<'new, R>;
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_shared::<R>()]
+        }
+
+        #[inline]
+        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
+            world.scene.get_resource_ref().ok_or(())
+        }
+    }
+
+    impl<R: Resource> SystemParam for ResMut<'_, R> {
+        type Item<'new> = ResMut<'new, R>;
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_mut::<R>()]
+        }
+
+        #[inline]
+        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
+            world.scene.get_resource_mut().ok_or(())
+        }
+    }
+
+    impl<R: Resource> SystemParam for GlobalRes<'_, R> {
+        type Item<'new> = GlobalRes<'new, R>;
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_shared::<R>()]
+        }
+
+        #[inline]
+        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
+            Ok(world
+                .global_resource
+                .get_resource_ref::<R>()
+                .ok_or(())?
+                .into())
+        }
+    }
+
+    impl<R: Resource> SystemParam for GlobalResMut<'_, R> {
+        type Item<'new> = GlobalResMut<'new, R>;
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_mut::<R>()]
+        }
+
+        #[inline]
+        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
+            Ok(world
+                .global_resource
+                .get_resource_mut::<R>()
+                .ok_or(())?
+                .into())
+        }
+    }
+
+    impl<R: NoSend> SystemParam for UnsendRef<'_, R> {
+        type Item<'new> = UnsendRef<'new, R>;
+
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_shared::<R>()]
+        }
+
+        #[inline]
+        fn local() -> bool {
+            true
+        }
+
+        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+            unimplemented!()
+        }
+
+        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
+            Ok(world
+                .current_scene()
+                .unsend
+                .get_resource_ref::<R>()
+                .ok_or(())?
+                .into())
+        }
+    }
+
+    impl<R: NoSend> SystemParam for UnsendMut<'_, R> {
+        type Item<'new> = UnsendMut<'new, R>;
+
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_mut::<R>()]
+        }
+
+        #[inline]
+        fn local() -> bool {
+            true
+        }
+
+        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+            unimplemented!()
+        }
+
+        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
+            Ok(world
+                .current_scene()
+                .unsend
+                .get_resource_mut::<R>()
+                .ok_or(())?
+                .into())
+        }
+    }
+
+    impl<R: NoSend> SystemParam for GlobalUnsendRef<'_, R> {
+        type Item<'new> = GlobalUnsendRef<'new, R>;
+
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_shared::<R>()]
+        }
+
+        #[inline]
+        fn local() -> bool {
+            true
+        }
+
+        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+            unimplemented!()
+        }
+
+        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
+            Ok(world
+                .global_nosend()
+                .get_resource_ref::<R>()
+                .ok_or(())?
+                .into())
+        }
+    }
+
+    impl<R: NoSend> SystemParam for GlobalUnsendMut<'_, R> {
+        type Item<'new> = GlobalUnsendMut<'new, R>;
+
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_mut::<R>()]
+        }
+
+        #[inline]
+        fn local() -> bool {
+            true
+        }
+
+        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+            unimplemented!()
+        }
+
+        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
+            Ok(world
+                .global_nosend()
+                .get_resource_mut::<R>()
+                .ok_or(())?
+                .into())
+        }
+    }
+
+    impl SystemParam for Commands {
+        type Item<'new> = Self;
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            vec![ParamType::new_shared::<Self>()]
+        }
+
+        #[inline]
+        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
+            Ok(world.commands.commands(world.scene.entities.spawner()))
+        }
+    }
+
+    impl<E: Extract> SystemParam for Query<'_, E> {
+        type Item<'new> = Query<'new, E>;
+
+        #[inline]
+        fn get_types() -> Vec<ParamType> {
+            E::get_types()
+        }
+
+        #[inline]
+        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
+            Query::new_internal(world.scene.entities)
+        }
+    }
+};
+
+// IntoSystem & System
+const _: () = {
+    impl<F: Fn() + Send + Sync> System for FunctionSystem<(), F> {
+        #[inline]
+        fn get_types(&self) -> Vec<ParamType> {
+            vec![ParamType::new_shared::<()>()]
+        }
+
+        #[inline]
+        fn local(&self) -> bool {
+            false
+        }
+
+        #[cfg(feature = "debug-utils")]
+        #[inline]
+        fn name(&self) -> &'static str {
+            type_name::<F>()
+        }
+
+        #[inline]
+        fn run(&self, _: WorldCellSend) -> Result<(), ()> {
+            (self.f)();
+            Ok(())
+        }
+
+        #[inline]
+        fn run_on_main(&self, _: WorldCellComplete) -> Result<(), ()> {
+            unimplemented!()
+        }
+    }
+
+    impl<F: Fn() + Send + Sync> IntoSystem<()> for F {
+        type System = FunctionSystem<(), Self>;
+
+        #[inline]
+        fn into_system(self) -> Self::System {
+            FunctionSystem {
+                f: self,
+                marker: Default::default(),
+            }
+        }
+    }
+
+    impl<'x, FF: Fn(&'x mut World) + Send + Sync> IntoSystem<&'x mut World> for FF
+    where
+        for<'a, 'b> &'a FF: Fn(&mut World) + Fn(&mut World),
+    {
+        type System = FunctionSystem<&'x mut World, Self>;
+
+        fn into_system(self) -> Self::System {
+            FunctionSystem {
+                f: self,
+                marker: Default::default(),
+            }
+        }
+    }
+
+    impl<FF> System for FunctionSystem<&mut World, FF>
+    where
+        for<'a, 'b> &'a FF: Fn(&mut World) + Fn(&mut World),
+        FF: Send + Sync,
+    {
+        #[inline]
+        fn get_types(&self) -> Vec<ParamType> {
+            vec![ParamType::World]
+        }
+
+        #[inline]
+        fn local(&self) -> bool {
+            true
+        }
+
+        #[cfg(feature = "debug-utils")]
+        fn name(&self) -> &'static str {
+            type_name::<FF>()
+        }
+
+        #[inline]
+        fn run(&self, _: WorldCellSend) -> Result<(), ()> {
+            unimplemented!()
+        }
+
+        fn run_on_main(&self, world: WorldCellComplete) -> Result<(), ()> {
+            fn call_inner(f: impl Fn(&mut World), world: &mut World) {
+                f(world)
+            }
+
+            call_inner(&self.f, *world.borrow_mut());
+            Ok(())
+        }
+    }
+
+    system_impl!(A);
+    system_impl!(A, B);
+    system_impl!(A, B, C);
 };
 
 #[inline]

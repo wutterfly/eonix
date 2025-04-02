@@ -2,8 +2,10 @@ use std::any::TypeId;
 
 use crate::{
     Scene,
+    components::EntityComponents,
     entity::{Entity, Generation},
     macros::unwrap,
+    system::ParamType,
     table::{Table, TableId},
 };
 
@@ -15,15 +17,21 @@ pub struct Query<'a, E: Extract> {
 impl<'a, E: Extract> Query<'a, E> {
     #[inline]
     pub fn new(scene: &'a Scene) -> Result<Self, ()> {
+        let entitie_components = &scene.entities;
+
+        Self::new_internal(entitie_components)
+    }
+
+    pub(crate) fn new_internal(entitie_components: &'a EntityComponents) -> Result<Self, ()> {
         E::validate();
 
-        let extracted_tables = Self::extract_tables(&scene.entities.tables)?;
+        let extracted_tables = Self::extract_tables(&entitie_components.tables)?;
 
-        debug_assert!(extracted_tables.len() > 0);
+        debug_assert!(!extracted_tables.is_empty());
 
         Ok(Self {
             tables: extracted_tables,
-            entities: &scene.entities.entities,
+            entities: &entitie_components.entities,
         })
     }
 
@@ -155,9 +163,11 @@ pub trait Extract {
     type RowOnly<'new>: RowAccess;
 
     #[inline]
-    fn raw_type() -> (TypeId, bool) {
+    fn raw_unit_type() -> (TypeId, bool) {
         unimplemented!()
     }
+
+    fn get_types() -> Vec<ParamType>;
 
     fn validate();
 

@@ -1,18 +1,24 @@
 use crate::{
     commands::{CommandCenter, Commands, ComponentCommands, EntityCommands, ResourceCommands},
     resources::{
-        GlobalRes, GlobalResMut, GlobalUnsend, GlobalUnsendMut, NoSend, Resource, Resources,
+        GlobalRes, GlobalResMut, GlobalUnsendMut, GlobalUnsendRef, NoSend, Resource, Resources,
     },
-    scene::Scene,
+    scene::{Scene, SendScene, SendScene2},
 };
 
 pub struct World {
-    commands: CommandCenter,
+    pub(crate) commands: CommandCenter,
 
     global_resources: Resources<dyn Resource>,
     global_nosend: Resources<dyn NoSend>,
 
     current_scene: Scene,
+}
+
+impl std::fmt::Debug for World {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
 }
 
 impl World {
@@ -25,12 +31,24 @@ impl World {
         }
     }
 
+    #[inline]
     pub const fn current_scene(&self) -> &Scene {
         &self.current_scene
     }
 
+    #[inline]
     pub const fn current_scene_mut(&mut self) -> &mut Scene {
         &mut self.current_scene
+    }
+
+    #[inline]
+    pub const fn global_resources(&self) -> &Resources<dyn Resource> {
+        &self.global_resources
+    }
+
+    #[inline]
+    pub const fn global_nosend(&self) -> &Resources<dyn NoSend> {
+        &self.global_nosend
     }
 
     #[inline]
@@ -45,8 +63,8 @@ impl World {
 
     #[inline]
     pub fn get_resource_ref<R: Resource>(&self) -> Option<GlobalRes<R>> {
-        let handle = self.global_resources.get_resource::<R>()?;
-        Some(GlobalRes { handle })
+        let handle = self.global_resources.get_resource_ref::<R>()?.into();
+        Some(handle)
     }
 
     #[inline]
@@ -61,9 +79,9 @@ impl World {
     }
 
     #[inline]
-    pub fn get_nosend_resource_ref<R: NoSend>(&self) -> Option<GlobalUnsend<R>> {
-        let handle = self.global_nosend.get_resource::<R>()?;
-        Some(GlobalUnsend { handle })
+    pub fn get_nosend_resource_ref<R: NoSend>(&self) -> Option<GlobalUnsendRef<R>> {
+        let handle = self.global_nosend.get_resource_ref::<R>()?.into();
+        Some(handle)
     }
 
     #[inline]
@@ -133,11 +151,55 @@ impl World {
             }
         }
     }
+
+    #[inline]
+    pub(crate) const fn send_world(&self) -> SendWorld {
+        SendWorld {
+            commands: &self.commands,
+            scene: self.current_scene.send_scene(),
+            global_resource: &self.global_resources,
+        }
+    }
+
+    pub(crate) const fn send_world2(&self) -> SendWorldPtr {
+        SendWorldPtr {
+            commands: &self.commands,
+            scene: self.current_scene().send_scene2(),
+            global_resource: self.global_resources(),
+        }
+    }
 }
 
 impl Default for World {
     #[inline]
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub struct SendWorld<'a> {
+    pub(crate) commands: &'a CommandCenter,
+    pub(crate) scene: SendScene<'a>,
+    pub(crate) global_resource: &'a Resources<dyn Resource>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SendWorldPtr<'a> {
+    pub(crate) commands: *const CommandCenter,
+    pub(crate) scene: SendScene2<'a>,
+    pub(crate) global_resource: *const Resources<dyn Resource>,
+}
+
+unsafe impl Send for SendWorldPtr<'_> {}
+unsafe impl Sync for SendWorldPtr<'_> {}
+
+impl SendWorldPtr<'_> {
+    #[inline]
+    pub const fn send_world(&self) -> SendWorld {
+        SendWorld {
+            commands: unsafe { self.commands.as_ref() }.unwrap(),
+            scene: self.scene.send_scene(),
+            global_resource: unsafe { self.global_resource.as_ref() }.unwrap(),
+        }
     }
 }

@@ -15,6 +15,8 @@ use crate::{
     macros::unwrap,
 };
 
+type RowComponent = dyn Any + Send + Sync + 'static;
+
 pub trait TableIdent {
     #[inline]
     fn validate() {}
@@ -48,7 +50,7 @@ impl TableId {
 
         for id in set {
             #[cfg(feature = "runtime-checks")]
-            debug_assert!(check.insert(*id));
+            assert!(check.insert(*id));
             builder.add_unqiue(*id);
         }
 
@@ -305,7 +307,7 @@ impl std::fmt::Debug for Table {
 pub struct Row {
     type_id: TypeId,
     type_name: &'static str,
-    components: AtomicRefCell<Box<dyn Any>>,
+    components: AtomicRefCell<Box<RowComponent>>,
 
     v_clone_empty: fn() -> Self,
     v_swap_remove: fn(row: &mut Row, position: usize),
@@ -315,7 +317,7 @@ pub struct Row {
 impl Row {
     pub fn new<C: Component>() -> Self {
         let vec = Vec::<C>::new();
-        let boxed: Box<dyn Any> = Box::new(vec);
+        let boxed: Box<RowComponent> = Box::new(vec);
 
         Self {
             type_id: TypeId::of::<C>(),
@@ -449,7 +451,7 @@ impl ExtendableTable {
 }
 
 pub struct RowAccessRef<'a, C: Component> {
-    guard: RefGuard<'a, Box<dyn Any>>,
+    guard: RefGuard<'a, Box<RowComponent>>,
     _p: PhantomData<C>,
 }
 
@@ -463,7 +465,7 @@ impl<C: Component> std::ops::Deref for RowAccessRef<'_, C> {
 }
 
 pub struct RowAccessMut<'a, C: Component> {
-    guard: MutGuard<'a, Box<dyn Any>>,
+    guard: MutGuard<'a, Box<RowComponent>>,
     _p: PhantomData<C>,
 }
 

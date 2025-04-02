@@ -203,11 +203,30 @@ macro_rules! extract_impl {
                 type Extracted<'new> = TableAccess<'new, Self::RowOnly<'new>>;
                 type RowOnly<'new> = ($($ty::RowOnly<'new>),+);
 
+                fn get_types() -> Vec<ParamType> {
+                    $(
+                        let mut $ty = $ty::get_types();
+                    )+
+
+                    let mut vec = Vec::with_capacity(0
+                        $(
+                            + $ty.len()
+                        )+
+                    );
+
+                    $(
+                        vec.append(&mut $ty);
+                    )+
+
+                    vec
+                }
+
+
                 #[inline]
                 fn validate() {
                     unique_tuple(&[
                         $(
-                            $ty::raw_type().0
+                            $ty::raw_unit_type().0
                         ),+
                     ]);
 
@@ -215,7 +234,7 @@ macro_rules! extract_impl {
                     assert!(
                         false
                         $(
-                            || $ty::raw_type().1
+                            || $ty::raw_unit_type().1
                         )+
                     );
                 }
@@ -237,8 +256,125 @@ macro_rules! extract_impl {
     };
 }
 
+macro_rules! system_impl {
+    ($($comp:ident),+) => {
+        #[allow(non_snake_case)]
+        #[allow(clippy::too_many_arguments)]
+        const _: () = {
+            impl<FF: Fn($($comp,)+), $($comp:SystemParam,)+> IntoSystem<($($comp,)+)> for FF
+            where
+                for<'a, 'b> &'a FF:
+                    Fn($($comp,)+) + Fn($(<$comp as SystemParam>::Item<'b>,)+),
+                    FF: Send + Sync
+            {
+                type System = FunctionSystem<($($comp,)+), Self>;
+
+                fn into_system(self) -> Self::System {
+                    ParamType::validate(&[
+                        $(
+                            &$comp::get_types(),
+                        )+
+                    ]);
+
+                    FunctionSystem {
+                        f: self,
+                        marker: Default::default(),
+                    }
+                }
+            }
+
+            impl<FF, $($comp:SystemParam,)+> System for FunctionSystem<($($comp,)+), FF>
+            where
+                for<'a, 'b> &'a FF:
+                    Fn($($comp,)+) + Fn($(<$comp as SystemParam>::Item<'b>,)+),
+                    FF: Send + Sync
+            {
+
+
+                fn get_types(&self) -> Vec<ParamType> {
+                    $(
+                        let mut $comp = $comp::get_types();
+                    )+
+
+                    let mut vec = Vec::with_capacity(0
+                        $(
+                            + $comp.len()
+                        )+
+                    );
+
+                    $(
+                        vec.append(&mut $comp);
+                    )+
+
+                    vec
+                }
+
+
+                #[inline]
+                fn local(&self) -> bool {
+                    false
+                    $(
+                      || $comp::local()
+                    )+
+                }
+
+                #[cfg(feature = "debug-utils")]
+                #[inline]
+                fn name(&self) -> &'static str {
+                    type_name::<FF>()
+                }
+
+                fn run(&self, world: WorldCellSend) -> Result<(), ()> {
+                    debug_assert!(!self.local());
+                    fn call_inner<$($comp,)+>(f: impl Fn($($comp,)+), $($comp: $comp,)+) {
+                        f($($comp,)+)
+                    }
+
+                    let borrow = *world.borrow();
+
+                    $(
+                        let world = borrow.send_world();
+                        let $comp = $comp::retrieve(world)?;
+                    )+
+
+
+                    call_inner(&self.f, $($comp,)+);
+
+                    Ok(())
+                }
+
+
+                fn run_on_main(&self, world: WorldCellComplete) -> Result<(), ()> {
+                    debug_assert!(self.local());
+
+                    fn call_inner<$($comp,)+>(f: impl Fn($($comp,)+), $($comp: $comp,)+) {
+                        f($($comp,)+)
+                    }
+
+                    let world = *world.borrow();
+
+                    $(
+                        let $comp = if $comp::local() {
+                            $comp::retrieve_local(world)?
+                        } else {
+                            let send_world = world.send_world();
+                            $comp::retrieve(send_world)?
+                        };
+                    )+
+
+                    call_inner(&self.f, $($comp,)+);
+
+                    Ok(())
+                }
+
+            }
+        };
+    };
+}
+
 pub(crate) use component_set_impl;
 pub(crate) use extract_impl;
 pub(crate) use row_access_impl;
+pub(crate) use system_impl;
 pub(crate) use table_ident_impl;
 pub(crate) use unwrap;
