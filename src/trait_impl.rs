@@ -11,14 +11,15 @@ use crate::{
     entity::Entity,
     filter::{Filter, FilterType},
     macros::{
-        component_set_impl, extract_impl, filter_impl, row_access_impl, system_impl,
-        table_ident_impl, unwrap,
+        component_set_impl, extract_impl, filter_impl, into_system_set_impl, row_access_impl,
+        system_impl, table_ident_impl, unwrap,
     },
     query::{Extract, GetComponentAccess, NoneIter, RowAccess, TableAccess},
     resources::{
         GlobalRes, GlobalResMut, GlobalUnsendMut, GlobalUnsendRef, Res, ResMut, UnsendMut,
         UnsendRef,
     },
+    schedule::{IntoSystemSet, SystemSet},
     system::{FunctionSystem, IntoSystem, ParamType, System, SystemParam},
     table::{Row, RowAccessMut, RowAccessRef, Table, TableId, TableIdBuilder, TableIdent},
     world::SendWorld,
@@ -615,12 +616,17 @@ const _: () = {
         }
     }
 
-    impl<E: Extract> SystemParam for Query<'_, E> {
-        type Item<'new> = Query<'new, E>;
+    impl<E: Extract, F: Filter> SystemParam for Query<'_, E, F> {
+        type Item<'new> = Query<'new, E, F>;
 
         #[inline]
         fn get_types() -> Vec<ParamType> {
             E::types()
+        }
+
+        #[inline]
+        fn get_filter() -> Vec<FilterType> {
+            F::types()
         }
 
         #[inline]
@@ -636,6 +642,11 @@ const _: () = {
         #[inline]
         fn get_types(&self) -> Vec<ParamType> {
             vec![ParamType::new_shared::<()>()]
+        }
+
+        #[inline]
+        fn get_filter(&self) -> Vec<FilterType> {
+            vec![]
         }
 
         #[inline]
@@ -657,7 +668,8 @@ const _: () = {
 
         #[inline]
         fn run_on_main(&self, _: WorldCellComplete) -> Result<(), ()> {
-            unimplemented!()
+            (self.f)();
+            Ok(())
         }
     }
 
@@ -698,6 +710,11 @@ const _: () = {
         }
 
         #[inline]
+        fn get_filter(&self) -> Vec<FilterType> {
+            vec![]
+        }
+
+        #[inline]
         fn local(&self) -> bool {
             true
         }
@@ -725,6 +742,16 @@ const _: () = {
     system_impl!(A);
     system_impl!(A, B);
     system_impl!(A, B, C);
+    system_impl!(A, B, C, D);
+    system_impl!(A, B, C, D, E);
+    system_impl!(A, B, C, D, E, F);
+
+    #[cfg(feature = "large_tuples")]
+    {
+        system_impl!(A, B, C, D, E, F, G);
+        system_impl!(A, B, C, D, E, F, G, H);
+        system_impl!(A, B, C, D, E, F, G, H, I);
+    }
 };
 
 // Filter
@@ -744,11 +771,50 @@ const _: () = {
         }
     }
 
-    filter_impl!(F1, F2);
-    filter_impl!(F1, F2, F3);
-    filter_impl!(F1, F2, F3, F4);
-    filter_impl!(F1, F2, F3, F4, F5);
-    filter_impl!(F1, F2, F3, F4, F5, F6);
+    filter_impl!(A, B);
+    filter_impl!(A, B, C);
+    filter_impl!(A, B, C, D);
+    filter_impl!(A, B, C, D, E);
+    filter_impl!(A, B, C, D, E, F);
+
+    #[cfg(feature = "large_tuples")]
+    {
+        filter_impl!(A, B, C, D, E, F, G);
+        filter_impl!(A, B, C, D, E, F, G, H);
+        filter_impl!(A, B, C, D, E, F, G, H, I);
+    }
+};
+
+// IntoSystemSet
+const _: () = {
+    impl<A, AI, AS> IntoSystemSet<(AI, AS)> for A
+    where
+        AS: System + 'static,
+        A: IntoSystem<AI, System = AS>,
+    {
+        fn into_set(self) -> SystemSet {
+            let system: Box<dyn System> = Box::new(self.into_system());
+            SystemSet::Single { system }
+        }
+    }
+
+    into_system_set_impl!(A, B | AI, BI | AS, BS);
+    into_system_set_impl!(A, B, C | AI, BI, CI | AS, BS, CS);
+    into_system_set_impl!(A, B, C, D | AI, BI, CI, DI | AS, BS, CS, DS);
+    into_system_set_impl!(A, B, C, D, E | AI, BI, CI, DI, EI | AS, BS, CS, DS, ES);
+
+    #[rustfmt::skip]
+    into_system_set_impl!(A, B, C, D, E, F | AI, BI, CI, DI, EI, FI | AS, BS, CS, DS, ES, FS);
+
+    #[cfg(feature = "large_tuples")]
+    {
+        #[rustfmt::skip]
+        into_system_set_impl!(A, B, C, D, E, F, G | AI, BI, CI, DI, EI, FI, GI | AS, BS, CS, DS, ES, FS, GS);
+        #[rustfmt::skip]
+        into_system_set_impl!(A, B, C, D, E, F, G, H | AI, BI, CI, DI, EI, FI, GI, HI | AS, BS, CS, DS, ES, FS, GS, HS);
+        #[rustfmt::skip]
+        into_system_set_impl!(A, B, C, D, E, F, G, H, I | AI, BI, CI, DI, EI, FI, GI, HI, II | AS, BS, CS, DS, ES, FS, GS, HS, IS);
+    }
 };
 
 #[cfg(feature = "runtime-checks")]

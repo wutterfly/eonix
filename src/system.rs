@@ -6,6 +6,7 @@ use std::{
 use crate::{
     World,
     cells::{WorldCellComplete, WorldCellSend},
+    filter::FilterType,
     world::SendWorld,
 };
 
@@ -18,6 +19,8 @@ pub struct FunctionSystem<Input, F> {
 pub trait System: Send + Sync {
     /// Returns a list of used parameter types and corresponding access types.
     fn get_types(&self) -> Vec<ParamType>;
+
+    fn get_filter(&self) -> Vec<FilterType>;
 
     /// Indicates wheather full access to the world is needed.
     fn local(&self) -> bool;
@@ -69,6 +72,11 @@ pub trait SystemParam {
 
     /// Returns a list of used parameter types and corresponding access types.
     fn get_types() -> Vec<ParamType>;
+
+    #[inline]
+    fn get_filter() -> Vec<FilterType> {
+        Vec::new()
+    }
 
     /// Retrives the implemented type from a `World`.
     fn retrieve(world: SendWorld<'_>) -> Option<Self::Item<'_>>;
@@ -136,6 +144,11 @@ impl ParamType {
             Self::Mut(type_id, _) | Self::Shared(type_id, _) => *type_id,
             Self::World => TypeId::of::<World>(),
         }
+    }
+
+    #[inline]
+    pub const fn is_world(&self) -> bool {
+        matches!(self, Self::World)
     }
 
     #[cfg(feature = "debug-utils")]

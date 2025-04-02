@@ -1,15 +1,15 @@
 mod common;
 
 use common::*;
-use eonix::{Query, Schedule, World};
+use eonix::{Query, ScheduleBuilder, Update, World};
 
 #[test]
 fn test() {
     let mut world = World::new();
-    let mut schedule = Schedule::new(4);
-
-    schedule.add_single_system(system_add);
-    schedule.add_single_system(system_world);
+    let schedule = ScheduleBuilder::new()
+        .add_system(Update, system_add)
+        .add_system(Update, system_world)
+        .build();
 
     schedule.run(&mut world);
 }

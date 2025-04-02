@@ -283,7 +283,7 @@ macro_rules! system_impl {
                 }
             }
 
-            impl<FF, $($comp:SystemParam,)+> System for FunctionSystem<($($comp,)+), FF>
+            impl<FF, $($comp: SystemParam,)+> System for FunctionSystem<($($comp,)+), FF>
             where
                 for<'a, 'b> &'a FF:
                     Fn($($comp,)+) + Fn($(<$comp as SystemParam>::Item<'b>,)+),
@@ -309,6 +309,24 @@ macro_rules! system_impl {
                     vec
                 }
 
+
+                fn get_filter(&self) -> Vec<FilterType> {
+                    $(
+                        let mut $comp = $comp::get_filter();
+                    )+
+
+                    let mut vec = Vec::with_capacity(0
+                        $(
+                            + $comp.len()
+                        )+
+                    );
+
+                    $(
+                        vec.append(&mut $comp);
+                    )+
+
+                    vec
+                }
 
                 #[inline]
                 fn local(&self) -> bool {
@@ -345,8 +363,6 @@ macro_rules! system_impl {
 
 
                 fn run_on_main(&self, world: WorldCellComplete) -> Result<(), ()> {
-                    debug_assert!(self.local());
-
                     fn call_inner<$($comp,)+>(f: impl Fn($($comp,)+), $($comp: $comp,)+) {
                         f($($comp,)+)
                     }
@@ -415,9 +431,86 @@ macro_rules! filter_impl {
     };
 }
 
+macro_rules! into_system_set_impl {
+    ($($comp:ident),+ | $($comp1:ident),+ | $($comp2:ident),+) => {
+        #[allow(non_snake_case)]
+        impl<$($comp,)+ $($comp1,)+ $($comp2,)+> IntoSystemSet<($($comp1,)+ $($comp2,)+)> for ($($comp,)+)
+        where
+            $(
+                $comp2: System + 'static,
+            )+
+
+            $(
+                $comp: IntoSystem<$comp1, System = $comp2>,
+            )+
+
+        {
+            fn into_set(self) -> SystemSet {
+                let ($($comp,)+) = self;
+
+                $(
+                    let $comp: Box<dyn System> = Box::new($comp.into_system());
+                )+
+
+                SystemSet::Chained {
+                    systems: vec![$($comp,)+].into_boxed_slice(),
+                }
+            }
+        }
+    };
+}
+
+macro_rules! catch_system_failure {
+    ($expr: expr) => {
+        if cfg!(feature = "runtime-checks") {
+            use std::panic::{AssertUnwindSafe, catch_unwind};
+
+            if let Err(err) = catch_unwind(AssertUnwindSafe(|| $expr)) {
+                if cfg!(feature = "debug-utils") {
+                    #[cfg(feature = "log")]
+                    {
+                        log::error!("{err:?}")
+                    }
+
+                    #[cfg(not(feature = "log"))]
+                    {
+                        println!("[ERROR] {err:?}")
+                    }
+                }
+            }
+        } else {
+            _ = $expr;
+        }
+    };
+
+    ($expr: expr, $err: expr) => {
+        if cfg!(feature = "runtime-checks") {
+            use std::panic::{AssertUnwindSafe, catch_unwind};
+
+            if let Err(_) = catch_unwind(AssertUnwindSafe(|| $expr)) {
+                if cfg!(feature = "debug-utils") {
+                    #[cfg(feature = "log")]
+                    {
+                        log::error!("System panicked: {}", $err)
+                    }
+
+                    #[cfg(not(feature = "log"))]
+                    {
+                        println!("[ERROR] System panicked: {}", $err)
+                    }
+                }
+            }
+        } else {
+            _ = $expr;
+        }
+    };
+}
+
+pub(crate) use catch_system_failure;
 pub(crate) use component_set_impl;
 pub(crate) use extract_impl;
 pub(crate) use filter_impl;
+pub(crate) use into_system_set_impl;
 pub(crate) use row_access_impl;
 pub(crate) use system_impl;
 pub(crate) use table_ident_impl;

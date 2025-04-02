@@ -125,6 +125,25 @@ impl FilterType {
         }
     }
 
+    #[inline]
+    pub fn prevents_overlapping(a: &[Self], b: &[Self]) -> bool {
+        for x in a {
+            for y in b {
+                match (x, y) {
+                    (Self::Has(t1, _), Self::Not(t2, _)) | (Self::Not(t1, _), Self::Has(t2, _)) => {
+                        if t1 == t2 {
+                            return true;
+                        }
+                    }
+                    (Self::Has(_, _), Self::Has(_, _)) | (Self::Not(_, _), Self::Not(_, _)) => {
+                        continue;
+                    }
+                }
+            }
+        }
+        false
+    }
+
     #[cfg(feature = "debug-utils")]
     #[inline]
     pub const fn name(&self) -> &'static str {

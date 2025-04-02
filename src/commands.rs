@@ -156,6 +156,27 @@ impl Commands {
             type_id: TypeId::of::<R>(),
         })
     }
+
+    #[inline]
+    /// Adds a new global resource.
+    pub fn add_global_resource<R: Resource>(&self, resource: R) {
+        _ = self
+            .resource_sender
+            .send(ResourceCommands::GlobalAddResource {
+                resource: Box::new(resource),
+                producer: ResourceStorageModifier::new::<R>(),
+            })
+    }
+
+    #[inline]
+    /// Removes a global resource.
+    pub fn remove_global_resource<R: Resource>(&self) {
+        _ = self
+            .resource_sender
+            .send(ResourceCommands::GlobalRemoveResource {
+                type_id: TypeId::of::<R>(),
+            })
+    }
 }
 
 #[derive(Debug)]
@@ -187,6 +208,14 @@ pub enum ResourceCommands {
         producer: ResourceStorageModifier,
     },
     RemoveResource {
+        type_id: TypeId,
+    },
+
+    GlobalAddResource {
+        resource: Box<UntypedResource>,
+        producer: ResourceStorageModifier,
+    },
+    GlobalRemoveResource {
         type_id: TypeId,
     },
 }

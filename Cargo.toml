@@ -9,13 +9,18 @@ categories = ["data-structures", "game-development"]
 repository = "https://github.com/wutterfly/eonix.git"
 
 [dependencies]
+
+eonix_derive = { path = "eonix_derive" , optional = true}
+
 crossbeam-channel = "0.5.14"
 rustc-hash = "2.1.1"
 
 
 
 [features]
-default = ["runtime-checks"]
+default = ["runtime-checks", "derive"]
 large_tuples = []
 runtime-checks = ["debug-utils"]
 debug-utils = []
+derive = ["dep:eonix_derive"]
+log = []

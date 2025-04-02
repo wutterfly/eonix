@@ -150,6 +150,13 @@ impl World {
                     //
                     self.current_scene.remove_resource_untyped(type_id);
                 }
+
+                ResourceCommands::GlobalAddResource { resource, producer } => self
+                    .global_resources
+                    .insert_resource_untyped(resource, producer),
+                ResourceCommands::GlobalRemoveResource { type_id } => {
+                    self.global_resources.remove_resource_untyped(type_id)
+                }
             }
         }
     }

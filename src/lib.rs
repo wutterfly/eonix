@@ -23,10 +23,15 @@ pub use components::Component;
 pub use entity::Entity;
 pub use filter::{Or, With, WithOut};
 pub use query::Query;
-pub use resources::{NoSend, Resource};
+pub use resources::{
+    GlobalRes, GlobalResMut, GlobalUnsendRef, NoSend, Res, ResMut, Resource, UnsendMut, UnsendRef,
+};
 pub use scene::Scene;
-pub use schedule::Schedule;
+pub use schedule::{PostUpdate, PreUpdate, Schedule, ScheduleBuilder, Setup, Shutdown, Update};
 pub use world::World;
+
+#[cfg(feature = "derive")]
+pub use eonix_derive::*;
 
 impl Component for u32 {}
 impl Component for i32 {}

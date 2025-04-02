@@ -9,3 +9,13 @@ A simple but powerfull *Entity Component System*.
     - thanks AI
 
 # 
+
+
+# TODO.
+
+- documentation
+- benchmarks
+- query cache
+- commands
+  - scene
+- busy wait
