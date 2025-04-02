@@ -2,6 +2,11 @@
 name = "eonix"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["ECS"]
+categories = ["data-structures", "game-development"]
+repository = "https://github.com/wutterfly/eonix.git"
 
 [dependencies]
 crossbeam-channel = "0.5.14"

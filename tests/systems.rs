@@ -6,7 +6,7 @@ use eonix::{Query, Schedule, World};
 #[test]
 fn test() {
     let mut world = World::new();
-    let mut schedule = Schedule::new();
+    let mut schedule = Schedule::new(4);
 
     schedule.add_single_system(system_add);
     schedule.add_single_system(system_world);

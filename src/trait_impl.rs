@@ -1,5 +1,5 @@
 use std::{
-    any::{TypeId, type_name},
+    any::TypeId,
     iter::Zip,
     ops::{Deref, DerefMut},
 };
@@ -9,8 +9,10 @@ use crate::{
     cells::{WorldCellComplete, WorldCellSend},
     components::ComponentSet,
     entity::Entity,
+    filter::{Filter, FilterType},
     macros::{
-        component_set_impl, extract_impl, row_access_impl, system_impl, table_ident_impl, unwrap,
+        component_set_impl, extract_impl, filter_impl, row_access_impl, system_impl,
+        table_ident_impl, unwrap,
     },
     query::{Extract, GetComponentAccess, NoneIter, RowAccess, TableAccess},
     resources::{
@@ -104,11 +106,11 @@ const _: () = {
         }
 
         #[inline]
-        fn get_types() -> Vec<ParamType> {
+        fn types() -> Vec<ParamType> {
             vec![ParamType::new_shared::<C>()]
         }
 
-        #[inline]
+        #[cfg(feature = "runtime-checks")]
         fn validate() {}
 
         #[inline]
@@ -140,11 +142,11 @@ const _: () = {
         }
 
         #[inline]
-        fn get_types() -> Vec<ParamType> {
+        fn types() -> Vec<ParamType> {
             vec![ParamType::new_mut::<C>()]
         }
 
-        #[inline]
+        #[cfg(feature = "runtime-checks")]
         fn validate() {}
 
         #[inline]
@@ -176,14 +178,13 @@ const _: () = {
         }
 
         #[inline]
-        fn get_types() -> Vec<ParamType> {
+        fn types() -> Vec<ParamType> {
             vec![ParamType::new_shared::<C>()]
         }
 
-        #[inline]
+        #[cfg(feature = "runtime-checks")]
         fn validate() {
-            #[cfg(feature = "runtime-checks")]
-            assert!(false);
+            panic!("Only Option<&C> is not a valid input for queries!")
         }
 
         #[inline]
@@ -215,14 +216,13 @@ const _: () = {
         }
 
         #[inline]
-        fn get_types() -> Vec<ParamType> {
+        fn types() -> Vec<ParamType> {
             vec![ParamType::new_mut::<C>()]
         }
 
-        #[inline]
+        #[cfg(feature = "runtime-checks")]
         fn validate() {
-            #[cfg(feature = "runtime-checks")]
-            assert!(false);
+            panic!("Only Option<&mut C> is not a valid input for queries!")
         }
 
         #[inline]
@@ -344,8 +344,7 @@ const _: () = {
 
         #[inline]
         fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
-            let row = self.as_mut()?;
-            let out = RowAccessRef::deref(row).get(position);
+            let out = self.as_mut()?.get(position);
 
             #[cfg(feature = "runtime-checks")]
             assert!(out.is_some());
@@ -373,8 +372,7 @@ const _: () = {
 
         #[inline]
         fn get_entity_components(&mut self, position: usize) -> Self::Item<'_> {
-            let row = self.as_mut()?;
-            let out = RowAccessMut::deref_mut(row).get_mut(position);
+            let out = self.as_mut()?.get_mut(position);
 
             #[cfg(feature = "runtime-checks")]
             assert!(out.is_some());
@@ -448,8 +446,8 @@ const _: () = {
         }
 
         #[inline]
-        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
-            world.scene.get_resource_ref().ok_or(())
+        fn retrieve(world: SendWorld) -> Option<Self::Item<'_>> {
+            world.scene.get_resource_ref()
         }
     }
 
@@ -462,8 +460,8 @@ const _: () = {
         }
 
         #[inline]
-        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
-            world.scene.get_resource_mut().ok_or(())
+        fn retrieve(world: SendWorld) -> Option<Self::Item<'_>> {
+            world.scene.get_resource_mut()
         }
     }
 
@@ -476,12 +474,11 @@ const _: () = {
         }
 
         #[inline]
-        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
-            Ok(world
+        fn retrieve(world: SendWorld) -> Option<Self::Item<'_>> {
+            world
                 .global_resource
                 .get_resource_ref::<R>()
-                .ok_or(())?
-                .into())
+                .map(Into::into)
         }
     }
 
@@ -494,12 +491,11 @@ const _: () = {
         }
 
         #[inline]
-        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
-            Ok(world
+        fn retrieve(world: SendWorld) -> Option<Self::Item<'_>> {
+            world
                 .global_resource
                 .get_resource_mut::<R>()
-                .ok_or(())?
-                .into())
+                .map(Into::into)
         }
     }
 
@@ -515,23 +511,24 @@ const _: () = {
             true
         }
 
-        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+        #[inline]
+        fn retrieve(_: SendWorld) -> Option<Self::Item<'_>> {
             unimplemented!()
         }
 
-        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
-            Ok(world
+        fn retrieve_local(world: &World) -> Option<Self::Item<'_>> {
+            world
                 .current_scene()
                 .unsend
                 .get_resource_ref::<R>()
-                .ok_or(())?
-                .into())
+                .map(Into::into)
         }
     }
 
     impl<R: NoSend> SystemParam for UnsendMut<'_, R> {
         type Item<'new> = UnsendMut<'new, R>;
 
+        #[inline]
         fn get_types() -> Vec<ParamType> {
             vec![ParamType::new_mut::<R>()]
         }
@@ -541,17 +538,17 @@ const _: () = {
             true
         }
 
-        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+        #[inline]
+        fn retrieve(_: SendWorld) -> Option<Self::Item<'_>> {
             unimplemented!()
         }
 
-        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
-            Ok(world
+        fn retrieve_local(world: &World) -> Option<Self::Item<'_>> {
+            world
                 .current_scene()
                 .unsend
                 .get_resource_mut::<R>()
-                .ok_or(())?
-                .into())
+                .map(Into::into)
         }
     }
 
@@ -567,16 +564,15 @@ const _: () = {
             true
         }
 
-        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+        fn retrieve(_: SendWorld) -> Option<Self::Item<'_>> {
             unimplemented!()
         }
 
-        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
-            Ok(world
+        fn retrieve_local(world: &World) -> Option<Self::Item<'_>> {
+            world
                 .global_nosend()
                 .get_resource_ref::<R>()
-                .ok_or(())?
-                .into())
+                .map(Into::into)
         }
     }
 
@@ -592,16 +588,16 @@ const _: () = {
             true
         }
 
-        fn retrieve(_: SendWorld) -> Result<Self::Item<'_>, ()> {
+        #[inline]
+        fn retrieve(_: SendWorld) -> Option<Self::Item<'_>> {
             unimplemented!()
         }
 
-        fn retrieve_local(world: &World) -> Result<Self::Item<'_>, ()> {
-            Ok(world
+        fn retrieve_local(world: &World) -> Option<Self::Item<'_>> {
+            world
                 .global_nosend()
                 .get_resource_mut::<R>()
-                .ok_or(())?
-                .into())
+                .map(Into::into)
         }
     }
 
@@ -614,8 +610,8 @@ const _: () = {
         }
 
         #[inline]
-        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
-            Ok(world.commands.commands(world.scene.entities.spawner()))
+        fn retrieve(world: SendWorld) -> Option<Self::Item<'_>> {
+            Some(world.commands.commands(world.scene.entities.spawner()))
         }
     }
 
@@ -624,11 +620,11 @@ const _: () = {
 
         #[inline]
         fn get_types() -> Vec<ParamType> {
-            E::get_types()
+            E::types()
         }
 
         #[inline]
-        fn retrieve(world: SendWorld) -> Result<Self::Item<'_>, ()> {
+        fn retrieve(world: SendWorld) -> Option<Self::Item<'_>> {
             Query::new_internal(world.scene.entities)
         }
     }
@@ -650,7 +646,7 @@ const _: () = {
         #[cfg(feature = "debug-utils")]
         #[inline]
         fn name(&self) -> &'static str {
-            type_name::<F>()
+            std::any::type_name::<F>()
         }
 
         #[inline]
@@ -708,7 +704,7 @@ const _: () = {
 
         #[cfg(feature = "debug-utils")]
         fn name(&self) -> &'static str {
-            type_name::<FF>()
+            std::any::type_name::<FF>()
         }
 
         #[inline]
@@ -731,15 +727,36 @@ const _: () = {
     system_impl!(A, B, C);
 };
 
-#[inline]
-fn unique_tuple<const N: usize>(_types: &[TypeId; N]) {
-    #[cfg(feature = "runtime-checks")]
-    {
-        for (i, t1) in _types.iter().enumerate() {
-            for (j, t2) in _types.iter().enumerate() {
-                if i != j {
-                    assert_ne!(t1, t2)
-                }
+// Filter
+const _: () = {
+    impl Filter for () {
+        #[inline]
+        fn types() -> Vec<FilterType> {
+            vec![]
+        }
+
+        #[cfg(feature = "runtime-checks")]
+        fn validate() {}
+
+        #[inline]
+        fn check(_: &Table) -> bool {
+            true
+        }
+    }
+
+    filter_impl!(F1, F2);
+    filter_impl!(F1, F2, F3);
+    filter_impl!(F1, F2, F3, F4);
+    filter_impl!(F1, F2, F3, F4, F5);
+    filter_impl!(F1, F2, F3, F4, F5, F6);
+};
+
+#[cfg(feature = "runtime-checks")]
+fn unique_tuple<const N: usize>(types: &[TypeId; N]) {
+    for (i, t1) in types.iter().enumerate() {
+        for (j, t2) in types.iter().enumerate() {
+            if i != j {
+                assert_ne!(t1, t2)
             }
         }
     }

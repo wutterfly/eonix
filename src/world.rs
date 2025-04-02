@@ -6,6 +6,7 @@ use crate::{
     scene::{Scene, SendScene, SendScene2},
 };
 
+#[cfg_attr(feature = "debug-utils", derive(Debug))]
 pub struct World {
     pub(crate) commands: CommandCenter,
 
@@ -15,9 +16,10 @@ pub struct World {
     current_scene: Scene,
 }
 
+#[cfg(not(feature = "debug-utils"))]
 impl std::fmt::Debug for World {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        writeln!(f, "World")
     }
 }
 

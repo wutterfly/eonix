@@ -1,49 +1,53 @@
-use std::any::TypeId;
+use std::{any::TypeId, marker::PhantomData};
 
 use crate::{
     Scene,
     components::EntityComponents,
     entity::{Entity, Generation},
+    filter::Filter,
     macros::unwrap,
     system::ParamType,
     table::{Table, TableId},
 };
 
-pub struct Query<'a, E: Extract> {
+pub struct Query<'a, E: Extract, F: Filter = ()> {
     pub tables: Vec<E::Extracted<'a>>,
     entities: &'a [(Generation, TableId)],
+    _f: PhantomData<F>,
 }
 
-impl<'a, E: Extract> Query<'a, E> {
+impl<'a, E: Extract, F: Filter> Query<'a, E, F> {
     #[inline]
-    pub fn new(scene: &'a Scene) -> Result<Self, ()> {
+    pub fn new(scene: &'a Scene) -> Option<Self> {
         let entitie_components = &scene.entities;
 
         Self::new_internal(entitie_components)
     }
 
-    pub(crate) fn new_internal(entitie_components: &'a EntityComponents) -> Result<Self, ()> {
-        E::validate();
+    pub(crate) fn new_internal(entitie_components: &'a EntityComponents) -> Option<Self> {
+        #[cfg(feature = "runtime-checks")]
+        Self::validate();
 
         let extracted_tables = Self::extract_tables(&entitie_components.tables)?;
 
         debug_assert!(!extracted_tables.is_empty());
 
-        Ok(Self {
+        Some(Self {
             tables: extracted_tables,
             entities: &entitie_components.entities,
+            _f: PhantomData,
         })
     }
 
     #[inline]
-    fn extract_tables(tables: &'a [Table]) -> Result<Vec<E::Extracted<'a>>, ()> {
+    fn extract_tables(tables: &'a [Table]) -> Option<Vec<E::Extracted<'a>>> {
         if tables.is_empty() {
-            return Err(());
+            return None;
         }
 
         let mut out = Vec::with_capacity(tables.len());
         for table in tables {
-            if table.is_empty() {
+            if table.is_empty() || !F::check(table) {
                 continue;
             }
 
@@ -53,10 +57,31 @@ impl<'a, E: Extract> Query<'a, E> {
         }
 
         if out.is_empty() {
-            return Err(());
+            return None;
         }
 
-        Ok(out)
+        Some(out)
+    }
+
+    #[cfg(feature = "runtime-checks")]
+    fn validate() {
+        E::validate();
+        F::validate();
+
+        let e_types = E::types();
+        let f_types = F::types();
+
+        for e_t in e_types.iter() {
+            for f_t in f_types.iter() {
+                if e_t.raw_type() == f_t.raw_type() {
+                    panic!(
+                        "Extract and Filter conflict: Extract: [{}]  <-> [{}] :Filter",
+                        e_t.name(),
+                        f_t.name()
+                    );
+                }
+            }
+        }
     }
 
     #[inline]
@@ -167,8 +192,9 @@ pub trait Extract {
         unimplemented!()
     }
 
-    fn get_types() -> Vec<ParamType>;
+    fn types() -> Vec<ParamType>;
 
+    #[cfg(feature = "runtime-checks")]
     fn validate();
 
     fn extract(table: &'_ Table) -> Result<Self::Extracted<'_>, ()>;
@@ -209,6 +235,7 @@ pub trait RowAccess {
     fn get_iter(&mut self) -> Self::Iter<'_>;
 }
 
+#[cfg(feature = "runtime-checks")]
 #[cfg(test)]
 mod tests {
     use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -217,7 +244,6 @@ mod tests {
 
     use super::Query;
 
-    #[cfg(feature = "runtime-checks")]
     #[test]
     fn test_invalid_same_type() {
         let scene = Scene::new();
@@ -229,7 +255,6 @@ mod tests {
         assert!(res.is_err());
     }
 
-    #[cfg(feature = "runtime-checks")]
     #[test]
     fn test_invalid_only_optional() {
         let scene = Scene::new();
@@ -242,6 +267,19 @@ mod tests {
         let res = catch_unwind(AssertUnwindSafe(|| {
             let _ = Query::<(Option<&u32>, Option<&i32>)>::new(&scene);
         }));
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_invalid_extract_and_filter() {
+        use crate::WithOut;
+
+        let scene = Scene::new();
+
+        let res = catch_unwind(AssertUnwindSafe(|| {
+            let _ = Query::<&u32, WithOut<u32>>::new(&scene);
+        }));
+
         assert!(res.is_err());
     }
 }

@@ -35,6 +35,17 @@ pub struct EntityComponents {
     spawner: EntitySpawner,
 }
 
+#[cfg(feature = "debug-utils")]
+impl std::fmt::Debug for EntityComponents {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EntityComponents")
+            .field("tables", &self.tables)
+            .field("entities", &self.entities)
+            .field("spawner", &self.spawner)
+            .finish()
+    }
+}
+
 impl EntityComponents {
     pub fn new() -> Self {
         Self {

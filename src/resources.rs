@@ -13,8 +13,9 @@ pub trait Resource: Any + Send + Sync + 'static {}
 
 pub trait NoSend: Any {}
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Resources<T: ?Sized + Any> {
+    #[allow(clippy::non_send_fields_in_send_ty)]
     resources: HashMap<TypeId, AtomicRefCell<Box<dyn Any>>>,
 
     /// Marks if these resources can be send
@@ -93,6 +94,16 @@ impl<T: ?Sized + Any> Resources<T> {
     /// If not resource for the given `TypeId` exists, nothing happens.
     pub fn remove_resource_untyped(&mut self, type_id: TypeId) {
         _ = self.resources.remove(&type_id);
+    }
+}
+
+#[cfg(feature = "debug-utils")]
+impl<T: ?Sized + Any> std::fmt::Debug for Resources<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Resources")
+            .field("resources", &self.resources.len())
+            .field("type", &std::any::type_name::<T>())
+            .finish()
     }
 }
 

@@ -36,7 +36,7 @@ pub fn split_world(world: &mut World) -> (WorldCellComplete, WorldCellSend) {
     (complete, send)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WorldCellComplete<'a> {
     //
     data: *mut World,
@@ -137,7 +137,7 @@ impl<'a> WorldCellComplete<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WorldCellSend<'a> {
     //
     data: SendWorldPtr<'a>,
@@ -194,7 +194,6 @@ impl<'a> WorldCellSend<'a> {
 }
 
 //
-#[derive(Debug)]
 #[clippy::has_significant_drop]
 pub struct SplitWorldRef<'a, T> {
     borrow: &'a AtomicUsize,
@@ -219,7 +218,6 @@ impl<'a, T> std::ops::Deref for SplitWorldRef<'a, T> {
     }
 }
 
-#[derive(Debug)]
 #[clippy::has_significant_drop]
 pub struct SplitWorldMut<'a> {
     borrow: &'a AtomicUsize,

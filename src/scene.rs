@@ -21,6 +21,17 @@ pub struct Scene {
     pub(crate) entities: EntityComponents,
 }
 
+#[cfg(feature = "debug-utils")]
+impl std::fmt::Debug for Scene {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scene")
+            .field("resources", &self.resources)
+            .field("unsend", &self.unsend)
+            .field("entities", &self.entities)
+            .finish()
+    }
+}
+
 impl Scene {
     #[inline]
     pub fn new() -> Self {
@@ -62,6 +73,7 @@ impl Scene {
     }
 
     pub fn add_component<C: ComponentSet>(&mut self, entity: &Entity, components: C) {
+        #[cfg(feature = "runtime-checks")]
         C::validate();
         self.entities.add_components(entity, components);
     }
@@ -78,6 +90,7 @@ impl Scene {
     }
 
     pub fn remove_components<C: ComponentSet>(&mut self, entity: &Entity) {
+        #[cfg(feature = "runtime-checks")]
         C::validate();
         self.entities.remove_component::<C>(entity);
     }

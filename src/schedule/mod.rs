@@ -11,10 +11,10 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    pub fn new() -> Self {
+    pub fn new(threads: usize) -> Self {
         Self {
             systems: Vec::new(),
-            thread_pool: ThreadPool::new(4),
+            thread_pool: ThreadPool::new(threads),
         }
     }
 

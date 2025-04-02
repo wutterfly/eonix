@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId, type_name},
+    any::{Any, TypeId},
     marker::PhantomData,
 };
 
@@ -71,10 +71,10 @@ pub trait SystemParam {
     fn get_types() -> Vec<ParamType>;
 
     /// Retrives the implemented type from a `World`.
-    fn retrieve(world: SendWorld<'_>) -> Result<Self::Item<'_>, ()>;
+    fn retrieve(world: SendWorld<'_>) -> Option<Self::Item<'_>>;
 
     #[inline]
-    fn retrieve_local(_: &World) -> Result<Self::Item<'_>, ()> {
+    fn retrieve_local(_: &World) -> Option<Self::Item<'_>> {
         unimplemented!()
     }
 }
@@ -113,7 +113,7 @@ impl ParamType {
         Self::Mut(
             TypeId::of::<T>(),
             #[cfg(feature = "debug-utils")]
-            type_name::<T>(),
+            std::any::type_name::<T>(),
             #[cfg(not(feature = "debug-utils"))]
             (),
         )
@@ -124,13 +124,29 @@ impl ParamType {
         Self::Shared(
             TypeId::of::<T>(),
             #[cfg(feature = "debug-utils")]
-            type_name::<T>(),
+            std::any::type_name::<T>(),
             #[cfg(not(feature = "debug-utils"))]
             (),
         )
     }
 
     #[inline]
+    pub fn raw_type(&self) -> TypeId {
+        match self {
+            Self::Mut(type_id, _) | Self::Shared(type_id, _) => *type_id,
+            Self::World => TypeId::of::<World>(),
+        }
+    }
+
+    #[cfg(feature = "debug-utils")]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Mut(_, name) | Self::Shared(_, name) => name,
+            Self::World => std::any::type_name::<World>(),
+        }
+    }
+
+    #[cfg(feature = "runtime-checks")]
     pub(crate) fn conflicts(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Mut(type_id_1, ..), Self::Mut(type_id_2, ..))
@@ -142,19 +158,18 @@ impl ParamType {
         }
     }
 
-    #[inline]
-    pub fn validate(_params: &[&[Self]]) {
-        #[cfg(feature = "runtime-checks")]
+    #[cfg(feature = "runtime-checks")]
+    pub fn validate(params: &[&[Self]]) {
         {
             use std::collections::HashSet;
 
-            if _params.is_empty() {
+            if params.is_empty() {
                 return;
             }
 
-            let mut set = HashSet::<Self>::with_capacity(_params.iter().map(|x| x.len()).sum());
+            let mut set = HashSet::<Self>::with_capacity(params.iter().map(|x| x.len()).sum());
 
-            for param in _params {
+            for param in params {
                 // check inner slice
                 for (i, a) in param.iter().enumerate() {
                     for (j, b) in param.iter().enumerate() {

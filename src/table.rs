@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId, type_name},
+    any::{Any, TypeId},
     hash::{Hash, Hasher},
     marker::PhantomData,
 };
@@ -18,7 +18,7 @@ use crate::{
 type RowComponent = dyn Any + Send + Sync + 'static;
 
 pub trait TableIdent {
-    #[inline]
+    #[cfg(feature = "runtime-checks")]
     fn validate() {}
 
     fn table_id() -> TableId;
@@ -107,7 +107,9 @@ pub struct Table {
 }
 
 impl Table {
+    #[inline]
     pub fn new<C: ComponentSet>() -> Self {
+        #[cfg(feature = "runtime-checks")]
         C::validate();
 
         Self {
@@ -277,6 +279,11 @@ impl Table {
     }
 
     #[inline]
+    pub fn contains_one(&self, type_id: TypeId) -> bool {
+        self.types().any(|t| t == type_id)
+    }
+
+    #[inline]
     fn get_entity_position(&self, entity: &Entity) -> usize {
         self.entities
             .iter()
@@ -285,11 +292,16 @@ impl Table {
     }
 }
 
+#[cfg(feature = "debug-utils")]
 impl std::fmt::Debug for Table {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut out = String::with_capacity(1024);
 
         use std::fmt::Write;
+        _ = writeln!(
+            &mut out,
+            "______________________________________________________________"
+        );
         _ = writeln!(&mut out, "Table");
         _ = writeln!(&mut out, "    ID: {:?}", self.id);
 
@@ -298,6 +310,10 @@ impl std::fmt::Debug for Table {
         }
 
         _ = writeln!(&mut out, "    ents:    {:?}", self.entities);
+        _ = writeln!(
+            &mut out,
+            "______________________________________________________________"
+        );
 
         f.write_str(&out)
     }
@@ -306,6 +322,8 @@ impl std::fmt::Debug for Table {
 #[derive(Debug)]
 pub struct Row {
     type_id: TypeId,
+
+    #[cfg(feature = "debug-utils")]
     type_name: &'static str,
     components: AtomicRefCell<Box<RowComponent>>,
 
@@ -321,7 +339,8 @@ impl Row {
 
         Self {
             type_id: TypeId::of::<C>(),
-            type_name: type_name::<C>(),
+            #[cfg(feature = "debug-utils")]
+            type_name: std::any::type_name::<C>(),
             components: AtomicRefCell::new(boxed),
 
             v_clone_empty: Self::new::<C>,
@@ -438,7 +457,7 @@ impl ExtendableTable {
 
     #[inline]
     fn check(&self) {
-        #[cfg(feature = "runtime-checks")]
+        #[cfg(debug_assertions)]
         {
             let mut builder = TableIdBuilder::new();
             for t in self.rows.iter().map(Row::tid) {

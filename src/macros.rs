@@ -84,7 +84,7 @@ macro_rules! table_ident_impl {
         #[allow(clippy::too_many_arguments, unused_parens)]
         const _: () = {
             impl<$($ty: Component),+> TableIdent for ($($ty),+) {
-                #[inline]
+                #[cfg(feature = "runtime-checks")]
                 fn validate() {
                     unique_tuple(&[
                         $(
@@ -203,9 +203,9 @@ macro_rules! extract_impl {
                 type Extracted<'new> = TableAccess<'new, Self::RowOnly<'new>>;
                 type RowOnly<'new> = ($($ty::RowOnly<'new>),+);
 
-                fn get_types() -> Vec<ParamType> {
+                fn types() -> Vec<ParamType> {
                     $(
-                        let mut $ty = $ty::get_types();
+                        let $ty = $ty::types();
                     )+
 
                     let mut vec = Vec::with_capacity(0
@@ -215,14 +215,14 @@ macro_rules! extract_impl {
                     );
 
                     $(
-                        vec.append(&mut $ty);
+                        vec.extend_from_slice(&$ty);
                     )+
 
                     vec
                 }
 
 
-                #[inline]
+                #[cfg(feature = "runtime-checks")]
                 fn validate() {
                     unique_tuple(&[
                         $(
@@ -230,7 +230,6 @@ macro_rules! extract_impl {
                         ),+
                     ]);
 
-                    #[cfg(feature = "runtime-checks")]
                     assert!(
                         false
                         $(
@@ -270,6 +269,7 @@ macro_rules! system_impl {
                 type System = FunctionSystem<($($comp,)+), Self>;
 
                 fn into_system(self) -> Self::System {
+                    #[cfg(feature = "runtime-checks")]
                     ParamType::validate(&[
                         $(
                             &$comp::get_types(),
@@ -321,7 +321,7 @@ macro_rules! system_impl {
                 #[cfg(feature = "debug-utils")]
                 #[inline]
                 fn name(&self) -> &'static str {
-                    type_name::<FF>()
+                    std::any::type_name::<FF>()
                 }
 
                 fn run(&self, world: WorldCellSend) -> Result<(), ()> {
@@ -334,7 +334,7 @@ macro_rules! system_impl {
 
                     $(
                         let world = borrow.send_world();
-                        let $comp = $comp::retrieve(world)?;
+                        let $comp = $comp::retrieve(world).ok_or(())?;
                     )+
 
 
@@ -355,10 +355,10 @@ macro_rules! system_impl {
 
                     $(
                         let $comp = if $comp::local() {
-                            $comp::retrieve_local(world)?
+                            $comp::retrieve_local(world).ok_or(())?
                         } else {
                             let send_world = world.send_world();
-                            $comp::retrieve(send_world)?
+                            $comp::retrieve(send_world).ok_or(())?
                         };
                     )+
 
@@ -372,8 +372,52 @@ macro_rules! system_impl {
     };
 }
 
+macro_rules! filter_impl {
+    ($($comp:ident),+) => {
+        #[allow(non_snake_case)]
+        #[allow(clippy::too_many_arguments)]
+        const _: () = {
+            impl<$($comp: Filter),+> Filter for ($($comp),+) {
+                #[inline]
+                fn types() -> Vec<FilterType> {
+                    $(
+                        let $comp = $comp::types();
+                    )+
+
+                    let mut vec = Vec::with_capacity(0
+                        $(
+                            + $comp.len()
+                        )+
+                    );
+
+                    $(
+                        vec.extend_from_slice(&$comp);
+                    )+
+
+                    vec
+                }
+
+                #[cfg(feature = "runtime-checks")]
+                fn validate() {
+                   if let Err(err) = FilterType::validate(&Self::types()) {
+                       panic!("{err}");
+                    }
+                }
+
+                #[inline]
+                fn check(table: &Table) -> bool {
+                    true $(
+                       && $comp::check(table)
+                    )+
+                }
+            }
+        };
+    };
+}
+
 pub(crate) use component_set_impl;
 pub(crate) use extract_impl;
+pub(crate) use filter_impl;
 pub(crate) use row_access_impl;
 pub(crate) use system_impl;
 pub(crate) use table_ident_impl;
