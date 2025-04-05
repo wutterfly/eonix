@@ -1,7 +1,10 @@
+![example workflow](https://github.com/wutterfly/eonix/actions/workflows/rust.yml/badge.svg)
+
+
 # EONIX
 
 
-A simple but powerfull *Entity Component System*.
+A simple but powerful *Entity Component System*.
 
 
 

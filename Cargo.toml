@@ -7,6 +7,12 @@ readme = "README.md"
 keywords = ["ECS"]
 categories = ["data-structures", "game-development"]
 repository = "https://github.com/wutterfly/eonix.git"
+description = "A simple but powerful Entity Component System."
+exclude = [
+    "examples/*",
+    "tests/*",
+    "benches/*",
+]
 
 [dependencies]
 
